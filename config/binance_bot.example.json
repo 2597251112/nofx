@@ -1,0 +1,16 @@
+{
+  "api_key": "your_binance_api_key",
+  "secret_key": "your_binance_secret_key",
+  "symbols": ["BTCUSDT", "ETHUSDT"],
+  "position_size_usdt": 100,
+  "leverage": 3,
+  "fast_ema_period": 9,
+  "slow_ema_period": 26,
+  "signal_buffer": 0.001,
+  "flat_threshold": 0.0005,
+  "stop_loss_pct": 1.5,
+  "take_profit_pct": 3.0,
+  "kline_interval": "5m",
+  "kline_limit": 300,
+  "poll_interval": "1m"
+}

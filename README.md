@@ -106,6 +106,16 @@ A Binance-compatible decentralized perpetual futures exchange!
 
 ---
 
+#### **Simple EMA Binance Bot CLI** (NEW!)
+
+- Lightweight dual-EMA crossover bot for Binance USDⓈ-M futures
+- Runs as a standalone binary in `cmd/binance-bot`
+- Supports JSON config files, environment variables, and CLI overrides
+- Automatically sets stop-loss / take-profit orders and exits flat in choppy regimes
+- 👉 See [BINANCE_BOT.md](BINANCE_BOT.md) for build and usage instructions
+
+---
+
 ## 📸 Screenshots
 
 ### 🏆 Competition Mode - Real-time AI Battle
