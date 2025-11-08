@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Menu, X, ChevronDown } from 'lucide-react'
 import { t, type Language } from '../../i18n/translations'
+import { useSystemConfig } from '../../hooks/useSystemConfig'
 
 interface HeaderBarProps {
   onLoginClick?: () => void
@@ -30,6 +31,8 @@ export default function HeaderBar({
   const [userDropdownOpen, setUserDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const userDropdownRef = useRef<HTMLDivElement>(null)
+  const { config: systemConfig } = useSystemConfig()
+  const registrationEnabled = systemConfig?.registration_enabled !== false
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -474,16 +477,18 @@ export default function HeaderBar({
                     >
                       {t('signIn', language)}
                     </a>
-                    <a
-                      href="/register"
-                      className="px-4 py-2 rounded font-semibold text-sm transition-colors hover:opacity-90"
-                      style={{
-                        background: 'var(--brand-yellow)',
-                        color: 'var(--brand-black)',
-                      }}
-                    >
-                      {t('signUp', language)}
-                    </a>
+                    {registrationEnabled && (
+                      <a
+                        href="/register"
+                        className="px-4 py-2 rounded font-semibold text-sm transition-colors hover:opacity-90"
+                        style={{
+                          background: 'var(--brand-yellow)',
+                          color: 'var(--brand-black)',
+                        }}
+                      >
+                        {t('signUp', language)}
+                      </a>
+                    )}
                   </div>
                 )
               )}
@@ -912,17 +917,19 @@ export default function HeaderBar({
                 >
                   {t('signIn', language)}
                 </a>
-                <a
-                  href="/register"
-                  className="block w-full px-4 py-2 rounded font-semibold text-sm text-center transition-colors"
-                  style={{
-                    background: 'var(--brand-yellow)',
-                    color: 'var(--brand-black)',
-                  }}
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  {t('signUp', language)}
-                </a>
+                {registrationEnabled && (
+                  <a
+                    href="/register"
+                    className="block w-full px-4 py-2 rounded font-semibold text-sm text-center transition-colors"
+                    style={{
+                      background: 'var(--brand-yellow)',
+                      color: 'var(--brand-black)',
+                    }}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    {t('signUp', language)}
+                  </a>
+                )}
               </div>
             )}
         </div>
