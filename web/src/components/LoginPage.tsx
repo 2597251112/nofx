@@ -6,7 +6,6 @@ import { t } from '../i18n/translations'
 import { Eye, EyeOff } from 'lucide-react'
 import { Input } from './ui/input'
 import { toast } from 'sonner'
-import { useSystemConfig } from '../hooks/useSystemConfig'
 
 export function LoginPage() {
   const { language } = useLanguage()
@@ -22,8 +21,6 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [adminPassword, setAdminPassword] = useState('')
   const adminMode = false
-  const { config: systemConfig } = useSystemConfig()
-  const registrationEnabled = systemConfig?.registration_enabled !== false
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault()
