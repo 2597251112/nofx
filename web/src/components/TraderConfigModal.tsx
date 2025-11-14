@@ -493,18 +493,26 @@ export function TraderConfigModal({
                     onChange={(e) => {
                       const parsedValue = Number(e.target.value)
                       const safeValue = Number.isFinite(parsedValue)
-                        ? Math.max(3, parsedValue)
+                        ? Math.max(1, parsedValue)
                         : 3
                       handleInputChange('scan_interval_minutes', safeValue)
                     }}
                     className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
-                    min="3"
+                    min="1"
                     max="60"
                     step="1"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     {t('scanIntervalRecommend', language)}
                   </p>
+                  {formData.scan_interval_minutes < 3 && (
+                    <div className="flex items-start gap-2 mt-2 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded">
+                      <span className="text-yellow-500 text-sm flex-shrink-0">⚠️</span>
+                      <p className="text-xs text-yellow-500">
+                        {t('scanIntervalCostWarning', language)}
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div></div>
               </div>
