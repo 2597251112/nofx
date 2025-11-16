@@ -14,7 +14,6 @@ import (
 	"nofx/crypto"
 	"nofx/decision"
 	"nofx/hook"
-	"nofx/logger"
 	"nofx/manager"
 	"nofx/trader"
 	"strconv"
@@ -1700,41 +1699,13 @@ func (s *Server) handlePerformance(c *gin.Context) {
 		}
 	}
 
-	// 🚀 懒加载：首次请求时初始化缓存，后续直接读缓存
-	cachedTrades := trader.GetDecisionLogger().GetRecentTrades(100)
-
-	var performance *logger.PerformanceAnalysis
-
-	// 如果缓存为空（首次请求或重启后），扫描历史文件初始化缓存
-	if len(cachedTrades) == 0 {
-		// 分析足够多的周期以填充缓存（获得约100条交易）
-		performance, err = trader.GetDecisionLogger().AnalyzePerformance(500)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("初始化缓存失败: %v", err),
-			})
-			return
-		}
-		// 重新从缓存读取
-		cachedTrades = trader.GetDecisionLogger().GetRecentTrades(100)
-	}
-
-	// 如果缓存已有数据，只需小窗口分析获取统计信息（不需要大量扫描）
-	if performance == nil {
-		performance, err = trader.GetDecisionLogger().AnalyzePerformance(100)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": fmt.Sprintf("分析历史表现失败: %v", err),
-			})
-			return
-		}
-	}
-
-	// 用缓存数据替换 RecentTrades，限制为用户请求的条数
-	if len(cachedTrades) > tradeLimit {
-		performance.RecentTrades = cachedTrades[:tradeLimit]
-	} else {
-		performance.RecentTrades = cachedTrades
+	// 🚀 使用统一的缓存懒加载逻辑
+	performance, err := trader.GetDecisionLogger().GetPerformanceWithCache(tradeLimit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("获取历史表现失败: %v", err),
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, performance)
