@@ -1590,6 +1590,118 @@ func (s *AutoTraderTestSuite) TestUpdateStopLossSkipDuplicate() {
 	})
 }
 
+// TestUpdateStopLossRatchet 测试止损单向移动机制 (Hard Limit)
+func (s *AutoTraderTestSuite) TestUpdateStopLossRatchet() {
+	s.Run("多单_拒绝回调止损(下移)", func() {
+		symbol := "BTCUSDT"
+		posKey := "BTCUSDT_long"
+		currentPrice := 55000.0
+		currentSL := 52000.0
+		newSL := 51000.0 // 变差（倒退）
+
+		// 初始化状态
+		s.autoTrader.positionStopLoss[posKey] = currentSL
+		s.mockTrader.positions = []map[string]interface{}{
+			{"symbol": symbol, "side": "long", "positionAmt": 1.0},
+		}
+		s.mockTrader.setStopLossCallCount = 0
+
+		s.patches.ApplyFunc(market.Get, func(sym string) (*market.Data, error) {
+			return &market.Data{Symbol: sym, CurrentPrice: currentPrice}, nil
+		})
+
+		decision := &decision.Decision{Symbol: symbol, Action: "update_stop_loss", NewStopLoss: newSL}
+		actionRecord := &logger.DecisionAction{}
+
+		err := s.autoTrader.executeUpdateStopLossWithRecord(decision, actionRecord)
+
+		s.NoError(err)
+		s.Equal(0, s.mockTrader.setStopLossCallCount, "不应该调用SetStopLoss")
+		s.Equal(currentSL, s.autoTrader.positionStopLoss[posKey], "内存状态不应改变")
+	})
+
+	s.Run("多单_接受优化止损(上移)", func() {
+		symbol := "BTCUSDT"
+		posKey := "BTCUSDT_long"
+		currentPrice := 55000.0
+		currentSL := 52000.0
+		newSL := 53000.0 // 变好（锁定更多利润）
+
+		s.autoTrader.positionStopLoss[posKey] = currentSL
+		s.mockTrader.positions = []map[string]interface{}{
+			{"symbol": symbol, "side": "long", "positionAmt": 1.0},
+		}
+		s.mockTrader.setStopLossCallCount = 0
+
+		s.patches.ApplyFunc(market.Get, func(sym string) (*market.Data, error) {
+			return &market.Data{Symbol: sym, CurrentPrice: currentPrice}, nil
+		})
+
+		decision := &decision.Decision{Symbol: symbol, Action: "update_stop_loss", NewStopLoss: newSL}
+		actionRecord := &logger.DecisionAction{}
+
+		err := s.autoTrader.executeUpdateStopLossWithRecord(decision, actionRecord)
+
+		s.NoError(err)
+		s.Equal(1, s.mockTrader.setStopLossCallCount, "应该调用SetStopLoss")
+		s.Equal(newSL, s.autoTrader.positionStopLoss[posKey], "内存状态应该更新")
+	})
+
+	s.Run("空单_拒绝回调止损(上移)", func() {
+		symbol := "ETHUSDT"
+		posKey := "ETHUSDT_short"
+		currentPrice := 2000.0
+		currentSL := 2500.0
+		newSL := 2600.0 // 变差（倒退）
+
+		s.autoTrader.positionStopLoss[posKey] = currentSL
+		s.mockTrader.positions = []map[string]interface{}{
+			{"symbol": symbol, "side": "short", "positionAmt": -10.0},
+		}
+		s.mockTrader.setStopLossCallCount = 0
+
+		s.patches.ApplyFunc(market.Get, func(sym string) (*market.Data, error) {
+			return &market.Data{Symbol: sym, CurrentPrice: currentPrice}, nil
+		})
+
+		decision := &decision.Decision{Symbol: symbol, Action: "update_stop_loss", NewStopLoss: newSL}
+		actionRecord := &logger.DecisionAction{}
+
+		err := s.autoTrader.executeUpdateStopLossWithRecord(decision, actionRecord)
+
+		s.NoError(err)
+		s.Equal(0, s.mockTrader.setStopLossCallCount, "不应该调用SetStopLoss")
+		s.Equal(currentSL, s.autoTrader.positionStopLoss[posKey], "内存状态不应改变")
+	})
+
+	s.Run("空单_接受优化止损(下移)", func() {
+		symbol := "ETHUSDT"
+		posKey := "ETHUSDT_short"
+		currentPrice := 2000.0
+		currentSL := 2500.0
+		newSL := 2400.0 // 变好（锁定更多利润）
+
+		s.autoTrader.positionStopLoss[posKey] = currentSL
+		s.mockTrader.positions = []map[string]interface{}{
+			{"symbol": symbol, "side": "short", "positionAmt": -10.0},
+		}
+		s.mockTrader.setStopLossCallCount = 0
+
+		s.patches.ApplyFunc(market.Get, func(sym string) (*market.Data, error) {
+			return &market.Data{Symbol: sym, CurrentPrice: currentPrice}, nil
+		})
+
+		decision := &decision.Decision{Symbol: symbol, Action: "update_stop_loss", NewStopLoss: newSL}
+		actionRecord := &logger.DecisionAction{}
+
+		err := s.autoTrader.executeUpdateStopLossWithRecord(decision, actionRecord)
+
+		s.NoError(err)
+		s.Equal(1, s.mockTrader.setStopLossCallCount, "应该调用SetStopLoss")
+		s.Equal(newSL, s.autoTrader.positionStopLoss[posKey], "内存状态应该更新")
+	})
+}
+
 // TestUpdateTakeProfitSkipDuplicate 测试重复的止盈更新应该被跳过
 func (s *AutoTraderTestSuite) TestUpdateTakeProfitSkipDuplicate() {
 	s.Run("新止盈价格与当前止盈相同时应该跳过操作", func() {

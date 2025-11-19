@@ -1061,6 +1061,24 @@ func (at *AutoTrader) executeUpdateStopLossWithRecord(decision *decision.Decisio
 	// 检查是否与当前止损相同，避免重复操作
 	posKey := decision.Symbol + "_" + strings.ToLower(positionSide)
 	currentStopLoss := at.positionStopLoss[posKey]
+
+	// ⚠️ 核心保护：防止止损倒退（Ratchet Stop Loss）
+	// 只有在 currentStopLoss > 0 (已设置过止损) 时才检查
+	if currentStopLoss > 0 {
+		// 多单：新止损必须 >= 当前止损（只能上移）
+		if positionSide == "LONG" && decision.NewStopLoss < currentStopLoss {
+			log.Printf("  🚫 拒绝回调止损 (Long): 新止损 %.2f < 当前止损 %.2f (禁止向下移动)",
+				decision.NewStopLoss, currentStopLoss)
+			return nil // 视为成功但不执行，避免AI报错重试
+		}
+		// 空单：新止损必须 <= 当前止损（只能下移）
+		if positionSide == "SHORT" && decision.NewStopLoss > currentStopLoss {
+			log.Printf("  🚫 拒绝回调止损 (Short): 新止损 %.2f > 当前止损 %.2f (禁止向上移动)",
+				decision.NewStopLoss, currentStopLoss)
+			return nil // 视为成功但不执行
+		}
+	}
+
 	if math.Abs(currentStopLoss-decision.NewStopLoss) < 0.01 {
 		log.Printf("  ℹ️  新止损价格(%.2f)与当前止损(%.2f)相同，跳过操作", decision.NewStopLoss, currentStopLoss)
 		return nil
