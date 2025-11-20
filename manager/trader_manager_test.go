@@ -151,3 +151,75 @@ func TestAddTraderFromDB_LoadAPIKey_TableDriven(t *testing.T) {
 		})
 	}
 }
+
+// TestReloadUserTraders_ShouldReplaceInstance 测试 ReloadUserTraders 是否会替换现有的 Trader 实例
+func TestReloadUserTraders_ShouldReplaceInstance(t *testing.T) {
+	tm := NewTraderManager()
+	traderID := "trader-reload-test"
+
+	// 1. 手动添加一个旧的 Trader 实例（模拟正在运行）
+	oldTrader := &trader.AutoTrader{}
+	tm.traders[traderID] = oldTrader
+
+	// 2. Mock 依赖
+	// Mock 数据库返回配置
+	mockDB := &config.Database{}
+	patchesDB := gomonkey.ApplyMethod(top(&config.Database{}), "GetTraders", func(_ *config.Database, _ string) ([]*config.TraderRecord, error) {
+		return []*config.TraderRecord{{
+			ID:         traderID,
+			Name:       "Reload Test Trader",
+			ExchangeID: "binance",
+			AIModelID:  "deepseek-1",
+		}}, nil
+	})
+	defer patchesDB.Reset()
+
+	// Mock 其他依赖 (GetAIModels, GetExchanges, GetUserSignalSource)
+	patchesAI := gomonkey.ApplyMethod(top(&config.Database{}), "GetAIModels", func(_ *config.Database, _ string) ([]*config.AIModelConfig, error) {
+		return []*config.AIModelConfig{{
+			ID:       "deepseek-1",
+			Provider: "deepseek",
+			Enabled:  true,
+		}}, nil
+	})
+	defer patchesAI.Reset()
+
+	patchesEx := gomonkey.ApplyMethod(top(&config.Database{}), "GetExchanges", func(_ *config.Database, _ string) ([]*config.ExchangeConfig, error) {
+		return []*config.ExchangeConfig{{ID: "binance", Enabled: true}}, nil
+	})
+	defer patchesEx.Reset()
+
+	patchesSig := gomonkey.ApplyMethod(top(&config.Database{}), "GetUserSignalSource", func(_ *config.Database, _ string) (*config.UserSignalSource, error) {
+		return &config.UserSignalSource{}, nil
+	})
+	defer patchesSig.Reset()
+
+	patchesSys := gomonkey.ApplyMethod(top(&config.Database{}), "GetSystemConfig", func(_ *config.Database, key string) (string, error) {
+		return "", nil
+	})
+	defer patchesSys.Reset()
+
+	// Mock NewAutoTrader 返回一个新的实例
+	newTrader := &trader.AutoTrader{}
+	patchesNew := gomonkey.ApplyFunc(trader.NewAutoTrader, func(_ trader.AutoTraderConfig, _ interface{}, _ string) (*trader.AutoTrader, error) {
+		return newTrader, nil
+	})
+	defer patchesNew.Reset()
+
+	// 3. 执行 Reload
+	err := tm.ReloadUserTraders(mockDB, "user1")
+
+	// 4. 验证
+	assert.NoError(t, err)
+
+	// 核心断言：Map 中的实例应该变成了新的实例
+	currentTrader := tm.traders[traderID]
+	assert.NotNil(t, currentTrader)
+	assert.NotSame(t, oldTrader, currentTrader, "ReloadUserTraders 应该替换旧的 Trader 实例")
+	assert.Same(t, newTrader, currentTrader, "Map 中应该是 NewAutoTrader 返回的新实例")
+}
+
+// 辅助函数：获取类型指针用于 gomonkey
+func top(v interface{}) interface{} {
+	return v
+}
