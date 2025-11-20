@@ -132,10 +132,10 @@ func NewAutoTrader(config AutoTraderConfig, database interface{}, userID string)
 	mcpClient := mcp.New()
 
 	// 初始化AI
-	if config.AIModel == "custom" {
+	if config.AIModel == "custom" || config.AIModel == "openai" {
 		// 使用自定义API
 		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
-		log.Printf("🤖 [%s] 使用自定义AI API: %s (模型: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
+		log.Printf("🤖 [%s] 使用自定义AI API (Provider: %s): %s (模型: %s)", config.Name, config.AIModel, config.CustomAPIURL, config.CustomModelName)
 	} else if config.UseQwen || config.AIModel == "qwen" {
 		// 使用Qwen (支持自定义URL和Model)
 		mcpClient = mcp.NewQwenClient()
