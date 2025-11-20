@@ -132,10 +132,18 @@ func NewAutoTrader(config AutoTraderConfig, database interface{}, userID string)
 	mcpClient := mcp.New()
 
 	// 初始化AI
-	if config.AIModel == "custom" || config.AIModel == "openai" {
+	if config.AIModel == "custom" {
 		// 使用自定义API
 		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
-		log.Printf("🤖 [%s] 使用自定义AI API (Provider: %s): %s (模型: %s)", config.Name, config.AIModel, config.CustomAPIURL, config.CustomModelName)
+		log.Printf("🤖 [%s] 使用自定义AI API: %s (模型: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
+	} else if config.AIModel == "openai" {
+		// 使用 OpenAI 兼容 API
+		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
+		log.Printf("🤖 [%s] 使用 OpenAI API: %s (模型: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
+	} else if config.AIModel == "anthropic" {
+		// 使用 Anthropic 兼容 API
+		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
+		log.Printf("🤖 [%s] 使用 Anthropic API: %s (模型: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
 	} else if config.UseQwen || config.AIModel == "qwen" {
 		// 使用Qwen (支持自定义URL和Model)
 		mcpClient = mcp.NewQwenClient()
@@ -1357,6 +1365,11 @@ func (at *AutoTrader) GetAIModel() string {
 // GetExchange 获取交易所
 func (at *AutoTrader) GetExchange() string {
 	return at.exchange
+}
+
+// GetConfig 获取交易配置（用于测试）
+func (at *AutoTrader) GetConfig() AutoTraderConfig {
+	return at.config
 }
 
 // SetCustomPrompt 设置自定义交易策略prompt
