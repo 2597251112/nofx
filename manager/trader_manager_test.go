@@ -1,7 +1,12 @@
 package manager
 
 import (
+	"nofx/config"
+	"nofx/trader"
 	"testing"
+
+	"github.com/agiledragon/gomonkey/v2"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestRemoveTrader 测试从内存中移除trader
@@ -85,3 +90,116 @@ func TestGetTrader_AfterRemove(t *testing.T) {
 		t.Error("获取已移除的 trader 应该返回错误")
 	}
 }
+
+// TestAddTraderFromDB_CustomProvider_LoadAPIKey 测试 Custom Provider 的 API Key 是否被正确加载
+func TestAddTraderFromDB_CustomProvider_LoadAPIKey(t *testing.T) {
+	tm := NewTraderManager()
+
+	// 1. 准备测试数据
+	traderCfg := &config.TraderRecord{
+		ID:   "trader-custom-1",
+		Name: "Custom Trader",
+	}
+	// 模拟一个 Custom 类型的 AI 模型
+	aiModelCfg := &config.AIModelConfig{
+		Provider: "custom",
+		APIKey:   "sk-custom-test-key", // 这是我们要验证的目标
+	}
+	exchangeCfg := &config.ExchangeConfig{
+		ID: "binance",
+	}
+
+	// 2. Mock trader.NewAutoTrader
+	// 我们需要捕获传入的 config，以验证 CustomAPIKey 是否被设置
+	var capturedConfig trader.AutoTraderConfig
+	patches := gomonkey.ApplyFunc(trader.NewAutoTrader, func(cfg trader.AutoTraderConfig, db interface{}, uid string) (*trader.AutoTrader, error) {
+		capturedConfig = cfg
+		return &trader.AutoTrader{}, nil
+	})
+	defer patches.Reset()
+
+	// 3. 执行 AddTraderFromDB
+	err := tm.AddTraderFromDB(traderCfg, aiModelCfg, exchangeCfg, "", "", 10, 20, 60, []string{}, nil, "user1")
+
+	// 4. 验证
+	assert.NoError(t, err)
+	
+		// 核心断言：CustomAPIKey 应该等于 aiModelCfg.APIKey
+	
+		assert.Equal(t, "sk-custom-test-key", capturedConfig.CustomAPIKey, "Custom Provider 的 API Key 应该被正确加载到 AutoTraderConfig 中")
+	
+	}
+	
+	
+	
+	// TestAddTraderFromDB_OpenAIProvider_LoadAPIKey 测试 OpenAI Provider 的 API Key 是否被正确加载
+	
+	func TestAddTraderFromDB_OpenAIProvider_LoadAPIKey(t *testing.T) {
+	
+		tm := NewTraderManager()
+	
+	
+	
+		// 1. 准备测试数据
+	
+		traderCfg := &config.TraderRecord{
+	
+			ID:   "trader-openai-1",
+	
+			Name: "OpenAI Trader",
+	
+		}
+	
+		// 模拟一个 OpenAI 类型的 AI 模型
+	
+		aiModelCfg := &config.AIModelConfig{
+	
+			Provider: "openai", // 验证 OpenAI Provider
+	
+			APIKey:   "sk-openai-test-key", // 验证目标
+	
+		}
+	
+		exchangeCfg := &config.ExchangeConfig{
+	
+			ID: "binance",
+	
+		}
+	
+	
+	
+		// 2. Mock trader.NewAutoTrader
+	
+		var capturedConfig trader.AutoTraderConfig
+	
+		patches := gomonkey.ApplyFunc(trader.NewAutoTrader, func(cfg trader.AutoTraderConfig, db interface{}, uid string) (*trader.AutoTrader, error) {
+	
+			capturedConfig = cfg
+	
+			return &trader.AutoTrader{}, nil
+	
+		})
+	
+		defer patches.Reset()
+	
+	
+	
+		// 3. 执行 AddTraderFromDB
+	
+		err := tm.AddTraderFromDB(traderCfg, aiModelCfg, exchangeCfg, "", "", 10, 20, 60, []string{}, nil, "user1")
+	
+	
+	
+		// 4. 验证
+	
+		assert.NoError(t, err)
+	
+	
+	
+		// 核心断言：CustomAPIKey 应该等于 aiModelCfg.APIKey
+	
+		assert.Equal(t, "sk-openai-test-key", capturedConfig.CustomAPIKey, "OpenAI Provider 的 API Key 应该被正确加载到 AutoTraderConfig 中")
+	
+	}
+	
+	

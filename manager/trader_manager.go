@@ -259,6 +259,8 @@ func (tm *TraderManager) addTraderFromDB(traderCfg *config.TraderRecord, aiModel
 		traderConfig.QwenKey = aiModelCfg.APIKey
 	} else if aiModelCfg.Provider == "deepseek" {
 		traderConfig.DeepSeekKey = aiModelCfg.APIKey
+	} else if aiModelCfg.Provider == "custom" || aiModelCfg.Provider == "openai" {
+		traderConfig.CustomAPIKey = aiModelCfg.APIKey
 	}
 
 	// 创建trader实例
@@ -365,6 +367,8 @@ func (tm *TraderManager) AddTraderFromDB(traderCfg *config.TraderRecord, aiModel
 		traderConfig.QwenKey = aiModelCfg.APIKey
 	} else if aiModelCfg.Provider == "deepseek" {
 		traderConfig.DeepSeekKey = aiModelCfg.APIKey
+	} else if aiModelCfg.Provider == "custom" || aiModelCfg.Provider == "openai" {
+		traderConfig.CustomAPIKey = aiModelCfg.APIKey
 	}
 
 	// 创建trader实例
@@ -1114,6 +1118,8 @@ func (tm *TraderManager) loadSingleTrader(traderCfg *config.TraderRecord, aiMode
 		traderConfig.QwenKey = aiModelCfg.APIKey
 	} else if aiModelCfg.Provider == "deepseek" {
 		traderConfig.DeepSeekKey = aiModelCfg.APIKey
+	} else if aiModelCfg.Provider == "custom" || aiModelCfg.Provider == "openai" {
+		traderConfig.CustomAPIKey = aiModelCfg.APIKey
 	}
 
 	// 创建trader实例
