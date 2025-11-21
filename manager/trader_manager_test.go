@@ -50,25 +50,19 @@ func TestRemoveTrader_StopsRunningTrader(t *testing.T) {
 		ScanInterval:   100 * time.Millisecond, // 短间隔
 	}
 	at, _ := trader.NewAutoTrader(cfg, nil, "user1")
-	
+
 	tm.traders[traderID] = at
 
-	// 模拟启动 Trader (手动设置状态)
-	// 注意：真正的 Run() 是阻塞循环，我们在测试中可以通过 hack 或者 wrapper 来模拟运行状态，
-	// 但最准确的是在一个 goroutine 中运行它，然后验证 Stop() 是否能让它退出。
-	// 这里我们利用 AutoTrader 的特性：Run() 会设置 isRunning=true，Stop() 会设置 isRunning=false。
-	
 	// 启动一个 goroutine 运行 trader
 	go func() {
 		at.Run()
 	}()
-	
-	// 等待启动完成 (简单等待，或者可以用更复杂的同步机制)
+
+	// 等待 trader 启动完成
 	time.Sleep(50 * time.Millisecond)
-	
-	// 验证正在运行
-	status := at.GetStatus()
-	if isRunning, ok := status["is_running"].(bool); !ok || !isRunning {
+
+	// 验证正在运行（使用线程安全的 IsRunning 方法）
+	if !at.IsRunning() {
 		t.Fatal("Trader 应该是运行状态")
 	}
 
@@ -80,11 +74,9 @@ func TestRemoveTrader_StopsRunningTrader(t *testing.T) {
 	if _, exists := tm.traders[traderID]; exists {
 		t.Error("trader 应该已从 map 中移除")
 	}
-	
+
 	// 验证 trader 已停止
-	// Stop() 是阻塞等待 goroutine 结束的，所以这里应该已经停止
-	statusAfter := at.GetStatus()
-	if isRunning, ok := statusAfter["is_running"].(bool); ok && isRunning {
+	if at.IsRunning() {
 		t.Error("Trader 应该已经被停止")
 	}
 }

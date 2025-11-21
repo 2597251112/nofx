@@ -99,6 +99,7 @@ type AutoTrader struct {
 	isRunning             bool
 	startTime             time.Time          // 系统启动时间
 	callCount             int                // AI调用次数
+	statusMutex           sync.RWMutex       // 保护 isRunning, startTime, callCount 的并发访问
 	positionFirstSeenTime map[string]int64                 // 持仓首次出现时间 (symbol_side -> timestamp毫秒)
 	lastPositions         map[string]decision.PositionInfo // 上一次周期的持仓快照 (用于检测被动平仓)
 	positionStopLoss      map[string]float64               // 持仓止损价格 (symbol_side -> stop_loss_price)
@@ -254,9 +255,11 @@ func NewAutoTrader(config AutoTraderConfig, database interface{}, userID string)
 
 // Run 运行自动交易主循环
 func (at *AutoTrader) Run() error {
+	at.statusMutex.Lock()
 	at.isRunning = true
 	at.stopMonitorCh = make(chan struct{})
 	at.startTime = time.Now()
+	at.statusMutex.Unlock()
 
 	log.Println("🚀 AI驱动自动交易系统启动")
 	log.Printf("💰 初始余额: %.2f USDT", at.initialBalance)
@@ -276,7 +279,7 @@ func (at *AutoTrader) Run() error {
 		log.Printf("❌ 执行失败: %v", err)
 	}
 
-	for at.isRunning {
+	for at.IsRunning() {
 		select {
 		case <-ticker.C:
 			if err := at.runCycle(); err != nil {
@@ -293,18 +296,30 @@ func (at *AutoTrader) Run() error {
 
 // Stop 停止自动交易
 func (at *AutoTrader) Stop() {
+	at.statusMutex.Lock()
 	if !at.isRunning {
+		at.statusMutex.Unlock()
 		return
 	}
 	at.isRunning = false
+	at.statusMutex.Unlock()
 	close(at.stopMonitorCh) // 通知监控goroutine停止
 	at.monitorWg.Wait()     // 等待监控goroutine结束
 	log.Println("⏹ 自动交易系统停止")
 }
 
+// IsRunning 返回当前运行状态（线程安全）
+func (at *AutoTrader) IsRunning() bool {
+	at.statusMutex.RLock()
+	defer at.statusMutex.RUnlock()
+	return at.isRunning
+}
+
 // runCycle 运行一个交易周期（使用AI全权决策）
 func (at *AutoTrader) runCycle() error {
+	at.statusMutex.Lock()
 	at.callCount++
+	at.statusMutex.Unlock()
 
 	log.Print("\n" + strings.Repeat("=", 70) + "\n")
 	log.Printf("⏰ %s - AI决策周期 #%d", time.Now().Format("2006-01-02 15:04:05"), at.callCount)
@@ -1404,15 +1419,22 @@ func (at *AutoTrader) GetStatus() map[string]interface{} {
 		aiProvider = "Qwen"
 	}
 
+	// 使用读锁保护并发访问的字段
+	at.statusMutex.RLock()
+	isRunning := at.isRunning
+	startTime := at.startTime
+	callCount := at.callCount
+	at.statusMutex.RUnlock()
+
 	return map[string]interface{}{
 		"trader_id":       at.id,
 		"trader_name":     at.name,
 		"ai_model":        at.aiModel,
 		"exchange":        at.exchange,
-		"is_running":      at.isRunning,
-		"start_time":      at.startTime.Format(time.RFC3339),
-		"runtime_minutes": int(time.Since(at.startTime).Minutes()),
-		"call_count":      at.callCount,
+		"is_running":      isRunning,
+		"start_time":      startTime.Format(time.RFC3339),
+		"runtime_minutes": int(time.Since(startTime).Minutes()),
+		"call_count":      callCount,
 		"initial_balance": at.initialBalance,
 		"scan_interval":   at.config.ScanInterval.String(),
 		"stop_until":      at.stopUntil.Format(time.RFC3339),
