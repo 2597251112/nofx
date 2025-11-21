@@ -63,6 +63,20 @@ func (m *MockPartialCloseTrader) SetTakeProfit(symbol, side string, quantity, pr
 	return nil
 }
 
+func assertPrice(t *testing.T, desc string, got, want float64) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s錯誤: got = %.2f, 期望 = %.2f", desc, got, want)
+	}
+}
+
+func assertBool(t *testing.T, desc string, got, want bool) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s錯誤: got = %v, 期望 = %v", desc, got, want)
+	}
+}
+
 // TestPartialCloseMinPositionCheck 測試最小倉位檢查邏輯
 func TestPartialCloseMinPositionCheck(t *testing.T) {
 	tests := []struct {
@@ -273,23 +287,15 @@ func TestPartialCloseSLTPFallbackFromMemory(t *testing.T) {
 			}
 
 			// 驗證最終價格
-			if finalStopLoss != tt.expectFinalSL {
-				t.Errorf("最終止損價格錯誤: got = %.2f, 期望 = %.2f", finalStopLoss, tt.expectFinalSL)
-			}
-			if finalTakeProfit != tt.expectFinalTP {
-				t.Errorf("最終止盈價格錯誤: got = %.2f, 期望 = %.2f", finalTakeProfit, tt.expectFinalTP)
-			}
+			assertPrice(t, "最終止損價格", finalStopLoss, tt.expectFinalSL)
+			assertPrice(t, "最終止盈價格", finalTakeProfit, tt.expectFinalTP)
 
 			// 驗證是否應該調用設置止損止盈
 			shouldSetSL := finalStopLoss > 0
 			shouldSetTP := finalTakeProfit > 0
 
-			if shouldSetSL != tt.expectSLRecovered {
-				t.Errorf("止損設置邏輯錯誤: shouldSet = %v, 期望 = %v", shouldSetSL, tt.expectSLRecovered)
-			}
-			if shouldSetTP != tt.expectTPRecovered {
-				t.Errorf("止盈設置邏輯錯誤: shouldSet = %v, 期望 = %v", shouldSetTP, tt.expectTPRecovered)
-			}
+			assertBool(t, "止損設置邏輯", shouldSetSL, tt.expectSLRecovered)
+			assertBool(t, "止盈設置邏輯", shouldSetTP, tt.expectTPRecovered)
 		})
 	}
 }
@@ -430,12 +436,8 @@ func TestPartialCloseSLTPMemoryCacheUpdate(t *testing.T) {
 			}
 
 			// 驗證緩存是否正確更新
-			if positionStopLoss[posKey] != tt.expectCacheStopLoss {
-				t.Errorf("內存緩存止損錯誤: got = %.2f, 期望 = %.2f", positionStopLoss[posKey], tt.expectCacheStopLoss)
-			}
-			if positionTakeProfit[posKey] != tt.expectCacheTakeProfit {
-				t.Errorf("內存緩存止盈錯誤: got = %.2f, 期望 = %.2f", positionTakeProfit[posKey], tt.expectCacheTakeProfit)
-			}
+			assertPrice(t, "內存緩存止損", positionStopLoss[posKey], tt.expectCacheStopLoss)
+			assertPrice(t, "內存緩存止盈", positionTakeProfit[posKey], tt.expectCacheTakeProfit)
 		})
 	}
 }
