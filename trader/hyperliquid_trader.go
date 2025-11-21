@@ -490,26 +490,18 @@ func (t *HyperliquidTrader) OpenShort(symbol string, quantity float64, leverage 
 
 // CloseLong 平多仓
 func (t *HyperliquidTrader) CloseLong(symbol string, quantity float64) (map[string]interface{}, error) {
-	// 获取当前持仓数量，用于判断是全部平仓还是部分平仓
-	var totalPositionQty float64
-	positions, err := t.GetPositions()
-	if err != nil {
-		return nil, err
-	}
-	for _, pos := range positions {
-		if pos["symbol"] == symbol && pos["side"] == "long" {
-			totalPositionQty = pos["positionAmt"].(float64)
-			break
-		}
-	}
-
-	// 判断是否是全部平仓
-	// quantity == 0 表示平掉全部，quantity >= totalPositionQty 也是全部平仓
-	isFullClose := quantity == 0 || quantity >= totalPositionQty
-
-	// 如果数量为0，使用全部持仓数量
+	// 如果数量为0，获取全部持仓数量
 	if quantity == 0 {
-		quantity = totalPositionQty
+		positions, err := t.GetPositions()
+		if err != nil {
+			return nil, err
+		}
+		for _, pos := range positions {
+			if pos["symbol"] == symbol && pos["side"] == "long" {
+				quantity = pos["positionAmt"].(float64)
+				break
+			}
+		}
 		if quantity == 0 {
 			return nil, fmt.Errorf("没有找到 %s 的多仓", symbol)
 		}
@@ -553,15 +545,12 @@ func (t *HyperliquidTrader) CloseLong(symbol string, quantity float64) (map[stri
 
 	log.Printf("✓ 平多仓成功: %s 数量: %.4f", symbol, roundedQuantity)
 
-	// 只有全部平仓时才取消挂单，部分平仓保留止损止盈订单
-	if isFullClose {
-		if err := t.CancelAllOrders(symbol); err != nil {
-			log.Printf("  ⚠ 取消挂单失败: %v", err)
-		} else {
-			log.Printf("  ✓ 已取消 %s 的所有挂单", symbol)
-		}
+	// 取消该币种的所有挂单（包括止损止盈）
+	// 注意：部分平仓时，auto_trader.go 会负责用正确的数量重新创建 SL/TP 订单
+	if err := t.CancelAllOrders(symbol); err != nil {
+		log.Printf("  ⚠ 取消挂单失败: %v", err)
 	} else {
-		log.Printf("  ℹ️ 部分平仓，保留原有止损止盈订单")
+		log.Printf("  ✓ 已取消 %s 的所有挂单", symbol)
 	}
 
 	result := make(map[string]interface{})
@@ -574,26 +563,18 @@ func (t *HyperliquidTrader) CloseLong(symbol string, quantity float64) (map[stri
 
 // CloseShort 平空仓
 func (t *HyperliquidTrader) CloseShort(symbol string, quantity float64) (map[string]interface{}, error) {
-	// 获取当前持仓数量，用于判断是全部平仓还是部分平仓
-	var totalPositionQty float64
-	positions, err := t.GetPositions()
-	if err != nil {
-		return nil, err
-	}
-	for _, pos := range positions {
-		if pos["symbol"] == symbol && pos["side"] == "short" {
-			totalPositionQty = pos["positionAmt"].(float64)
-			break
-		}
-	}
-
-	// 判断是否是全部平仓
-	// quantity == 0 表示平掉全部，quantity >= totalPositionQty 也是全部平仓
-	isFullClose := quantity == 0 || quantity >= totalPositionQty
-
-	// 如果数量为0，使用全部持仓数量
+	// 如果数量为0，获取全部持仓数量
 	if quantity == 0 {
-		quantity = totalPositionQty
+		positions, err := t.GetPositions()
+		if err != nil {
+			return nil, err
+		}
+		for _, pos := range positions {
+			if pos["symbol"] == symbol && pos["side"] == "short" {
+				quantity = pos["positionAmt"].(float64)
+				break
+			}
+		}
 		if quantity == 0 {
 			return nil, fmt.Errorf("没有找到 %s 的空仓", symbol)
 		}
@@ -637,15 +618,12 @@ func (t *HyperliquidTrader) CloseShort(symbol string, quantity float64) (map[str
 
 	log.Printf("✓ 平空仓成功: %s 数量: %.4f", symbol, roundedQuantity)
 
-	// 只有全部平仓时才取消挂单，部分平仓保留止损止盈订单
-	if isFullClose {
-		if err := t.CancelAllOrders(symbol); err != nil {
-			log.Printf("  ⚠ 取消挂单失败: %v", err)
-		} else {
-			log.Printf("  ✓ 已取消 %s 的所有挂单", symbol)
-		}
+	// 取消该币种的所有挂单（包括止损止盈）
+	// 注意：部分平仓时，auto_trader.go 会负责用正确的数量重新创建 SL/TP 订单
+	if err := t.CancelAllOrders(symbol); err != nil {
+		log.Printf("  ⚠ 取消挂单失败: %v", err)
 	} else {
-		log.Printf("  ℹ️ 部分平仓，保留原有止损止盈订单")
+		log.Printf("  ✓ 已取消 %s 的所有挂单", symbol)
 	}
 
 	result := make(map[string]interface{})

@@ -709,26 +709,18 @@ func (t *AsterTrader) OpenShort(symbol string, quantity float64, leverage int) (
 
 // CloseLong 平多单
 func (t *AsterTrader) CloseLong(symbol string, quantity float64) (map[string]interface{}, error) {
-	// 获取当前持仓数量，用于判断是全部平仓还是部分平仓
-	var totalPositionQty float64
-	positions, err := t.GetPositions()
-	if err != nil {
-		return nil, err
-	}
-	for _, pos := range positions {
-		if pos["symbol"] == symbol && pos["side"] == "long" {
-			totalPositionQty = pos["positionAmt"].(float64)
-			break
-		}
-	}
-
-	// 判断是否是全部平仓
-	// quantity == 0 表示平掉全部，quantity >= totalPositionQty 也是全部平仓
-	isFullClose := quantity == 0 || quantity >= totalPositionQty
-
-	// 如果数量为0，使用全部持仓数量
+	// 如果数量为0，获取全部持仓数量
 	if quantity == 0 {
-		quantity = totalPositionQty
+		positions, err := t.GetPositions()
+		if err != nil {
+			return nil, err
+		}
+		for _, pos := range positions {
+			if pos["symbol"] == symbol && pos["side"] == "long" {
+				quantity = pos["positionAmt"].(float64)
+				break
+			}
+		}
 		if quantity == 0 {
 			return nil, fmt.Errorf("没有找到 %s 的多仓", symbol)
 		}
@@ -787,15 +779,12 @@ func (t *AsterTrader) CloseLong(symbol string, quantity float64) (map[string]int
 
 	log.Printf("✓ 平多仓成功: %s 数量: %s", symbol, qtyStr)
 
-	// 只有全部平仓时才取消挂单，部分平仓保留止损止盈订单
-	if isFullClose {
-		if err := t.CancelAllOrders(symbol); err != nil {
-			log.Printf("  ⚠ 取消挂单失败: %v", err)
-		} else {
-			log.Printf("  ✓ 已取消 %s 的所有挂单", symbol)
-		}
+	// 取消该币种的所有挂单（包括止损止盈）
+	// 注意：部分平仓时，auto_trader.go 会负责用正确的数量重新创建 SL/TP 订单
+	if err := t.CancelAllOrders(symbol); err != nil {
+		log.Printf("  ⚠ 取消挂单失败: %v", err)
 	} else {
-		log.Printf("  ℹ️ 部分平仓，保留原有止损止盈订单")
+		log.Printf("  ✓ 已取消 %s 的所有挂单", symbol)
 	}
 
 	return result, nil
@@ -803,27 +792,19 @@ func (t *AsterTrader) CloseLong(symbol string, quantity float64) (map[string]int
 
 // CloseShort 平空单
 func (t *AsterTrader) CloseShort(symbol string, quantity float64) (map[string]interface{}, error) {
-	// 获取当前持仓数量，用于判断是全部平仓还是部分平仓
-	var totalPositionQty float64
-	positions, err := t.GetPositions()
-	if err != nil {
-		return nil, err
-	}
-	for _, pos := range positions {
-		if pos["symbol"] == symbol && pos["side"] == "short" {
-			// Aster的GetPositions已经将空仓数量转换为正数，直接使用
-			totalPositionQty = pos["positionAmt"].(float64)
-			break
-		}
-	}
-
-	// 判断是否是全部平仓
-	// quantity == 0 表示平掉全部，quantity >= totalPositionQty 也是全部平仓
-	isFullClose := quantity == 0 || quantity >= totalPositionQty
-
-	// 如果数量为0，使用全部持仓数量
+	// 如果数量为0，获取全部持仓数量
 	if quantity == 0 {
-		quantity = totalPositionQty
+		positions, err := t.GetPositions()
+		if err != nil {
+			return nil, err
+		}
+		for _, pos := range positions {
+			if pos["symbol"] == symbol && pos["side"] == "short" {
+				// Aster的GetPositions已经将空仓数量转换为正数，直接使用
+				quantity = pos["positionAmt"].(float64)
+				break
+			}
+		}
 		if quantity == 0 {
 			return nil, fmt.Errorf("没有找到 %s 的空仓", symbol)
 		}
@@ -882,15 +863,12 @@ func (t *AsterTrader) CloseShort(symbol string, quantity float64) (map[string]in
 
 	log.Printf("✓ 平空仓成功: %s 数量: %s", symbol, qtyStr)
 
-	// 只有全部平仓时才取消挂单，部分平仓保留止损止盈订单
-	if isFullClose {
-		if err := t.CancelAllOrders(symbol); err != nil {
-			log.Printf("  ⚠ 取消挂单失败: %v", err)
-		} else {
-			log.Printf("  ✓ 已取消 %s 的所有挂单", symbol)
-		}
+	// 取消该币种的所有挂单（包括止损止盈）
+	// 注意：部分平仓时，auto_trader.go 会负责用正确的数量重新创建 SL/TP 订单
+	if err := t.CancelAllOrders(symbol); err != nil {
+		log.Printf("  ⚠ 取消挂单失败: %v", err)
 	} else {
-		log.Printf("  ℹ️ 部分平仓，保留原有止损止盈订单")
+		log.Printf("  ✓ 已取消 %s 的所有挂单", symbol)
 	}
 
 	return result, nil

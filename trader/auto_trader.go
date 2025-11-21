@@ -432,6 +432,17 @@ func (at *AutoTrader) runCycle() error {
 				pnlPct,
 				reasonCN)
 		}
+
+		// ✅ 清理被动平仓后残留的止损止盈订单 (Fix #76)
+		// 当止损触发时，止盈订单会残留；当止盈触发时，止损订单会残留
+		// 需要主动取消这些残留订单，避免订单累积
+		for _, closed := range closedPositions {
+			if err := at.trader.CancelAllOrders(closed.Symbol); err != nil {
+				log.Printf("  ⚠️ 清理 %s 残留订单失败: %v", closed.Symbol, err)
+			} else {
+				log.Printf("  🧹 已清理 %s 的残留止损止盈订单", closed.Symbol)
+			}
+		}
 	}
 
 	log.Print(strings.Repeat("=", 70))
@@ -1333,22 +1344,46 @@ func (at *AutoTrader) executePartialCloseWithRecord(decision *decision.Decision,
 		log.Printf("  ⚠️ 部分平仓成交价验证失败: %v", err)
 	}
 
-	// ✅ Step 4: 可选 - 更新止盈止损价格
-	// 注意：部分平仓时，CloseLong/CloseShort 已经保留了原有的止损止盈订单
-	// 如果 AI 提供了新的止损止盈价格，则更新为新价格（例如移动止损）
-	if decision.NewStopLoss > 0 {
-		log.Printf("  → 更新剩余仓位 %.4f 的止损价: %.2f", remainingQuantity, decision.NewStopLoss)
-		err = at.trader.SetStopLoss(decision.Symbol, positionSide, remainingQuantity, decision.NewStopLoss)
+	// ✅ Step 4: 重新创建止盈止损订单（使用剩余数量）
+	// 部分平仓时，CloseLong/CloseShort 会取消所有挂单（因为原订单数量不正确）
+	// 需要用剩余数量重新创建 SL/TP 订单
+	// 优先使用 AI 提供的新价格，否则使用原始价格
+	originalStopLoss, _ := targetPosition["stopLoss"].(float64)
+	originalTakeProfit, _ := targetPosition["takeProfit"].(float64)
+
+	// 确定最终使用的 SL/TP 价格
+	finalStopLoss := decision.NewStopLoss
+	if finalStopLoss <= 0 {
+		finalStopLoss = originalStopLoss
+	}
+	finalTakeProfit := decision.NewTakeProfit
+	if finalTakeProfit <= 0 {
+		finalTakeProfit = originalTakeProfit
+	}
+
+	// 重新创建止损订单
+	if finalStopLoss > 0 {
+		if decision.NewStopLoss > 0 {
+			log.Printf("  → 设置剩余仓位 %.4f 的新止损价: %.4f (AI指定)", remainingQuantity, finalStopLoss)
+		} else {
+			log.Printf("  → 恢复剩余仓位 %.4f 的原止损价: %.4f", remainingQuantity, finalStopLoss)
+		}
+		err = at.trader.SetStopLoss(decision.Symbol, positionSide, remainingQuantity, finalStopLoss)
 		if err != nil {
-			log.Printf("  ⚠️ 更新止损失败: %v（不影响平仓结果）", err)
+			log.Printf("  ⚠️ 设置止损失败: %v（不影响平仓结果）", err)
 		}
 	}
 
-	if decision.NewTakeProfit > 0 {
-		log.Printf("  → 更新剩余仓位 %.4f 的止盈价: %.2f", remainingQuantity, decision.NewTakeProfit)
-		err = at.trader.SetTakeProfit(decision.Symbol, positionSide, remainingQuantity, decision.NewTakeProfit)
+	// 重新创建止盈订单
+	if finalTakeProfit > 0 {
+		if decision.NewTakeProfit > 0 {
+			log.Printf("  → 设置剩余仓位 %.4f 的新止盈价: %.4f (AI指定)", remainingQuantity, finalTakeProfit)
+		} else {
+			log.Printf("  → 恢复剩余仓位 %.4f 的原止盈价: %.4f", remainingQuantity, finalTakeProfit)
+		}
+		err = at.trader.SetTakeProfit(decision.Symbol, positionSide, remainingQuantity, finalTakeProfit)
 		if err != nil {
-			log.Printf("  ⚠️ 更新止盈失败: %v（不影响平仓结果）", err)
+			log.Printf("  ⚠️ 设置止盈失败: %v（不影响平仓结果）", err)
 		}
 	}
 
