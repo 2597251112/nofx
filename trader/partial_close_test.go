@@ -191,6 +191,101 @@ func TestPartialCloseWithStopLossTakeProfitRecovery(t *testing.T) {
 	}
 }
 
+// TestPartialCloseSLTPFallbackFromMemory 測試當 AI 不提供 SL/TP 時，從內存 fallback 獲取原始價格
+// 這是 Issue #70 的關鍵修復：確保部分平倉後剩餘倉位有止損止盈保護
+func TestPartialCloseSLTPFallbackFromMemory(t *testing.T) {
+	tests := []struct {
+		name               string
+		aiNewStopLoss      float64 // AI 提供的新止損
+		aiNewTakeProfit    float64 // AI 提供的新止盈
+		memoryStopLoss     float64 // 內存中緩存的原始止損
+		memoryTakeProfit   float64 // 內存中緩存的原始止盈
+		expectFinalSL      float64 // 最終使用的止損
+		expectFinalTP      float64 // 最終使用的止盈
+		expectSLRecovered  bool    // 是否應該設置止損
+		expectTPRecovered  bool    // 是否應該設置止盈
+	}{
+		{
+			name:              "AI提供新價格_使用AI價格",
+			aiNewStopLoss:     48000.0,
+			aiNewTakeProfit:   52000.0,
+			memoryStopLoss:    47000.0,
+			memoryTakeProfit:  51000.0,
+			expectFinalSL:     48000.0, // 使用 AI 提供的價格
+			expectFinalTP:     52000.0,
+			expectSLRecovered: true,
+			expectTPRecovered: true,
+		},
+		{
+			name:              "AI不提供_從內存fallback",
+			aiNewStopLoss:     0,
+			aiNewTakeProfit:   0,
+			memoryStopLoss:    47000.0,
+			memoryTakeProfit:  51000.0,
+			expectFinalSL:     47000.0, // 從內存 fallback
+			expectFinalTP:     51000.0,
+			expectSLRecovered: true,
+			expectTPRecovered: true,
+		},
+		{
+			name:              "AI提供止損_止盈從內存fallback",
+			aiNewStopLoss:     48000.0,
+			aiNewTakeProfit:   0,
+			memoryStopLoss:    47000.0,
+			memoryTakeProfit:  51000.0,
+			expectFinalSL:     48000.0, // AI 提供
+			expectFinalTP:     51000.0, // 內存 fallback
+			expectSLRecovered: true,
+			expectTPRecovered: true,
+		},
+		{
+			name:              "AI和內存都沒有_不設置",
+			aiNewStopLoss:     0,
+			aiNewTakeProfit:   0,
+			memoryStopLoss:    0,
+			memoryTakeProfit:  0,
+			expectFinalSL:     0,
+			expectFinalTP:     0,
+			expectSLRecovered: false,
+			expectTPRecovered: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 模擬 executePartialCloseWithRecord 中的邏輯
+			// 優先使用 AI 提供的新價格，否則使用內存中緩存的原始價格
+			finalStopLoss := tt.aiNewStopLoss
+			if finalStopLoss <= 0 {
+				finalStopLoss = tt.memoryStopLoss
+			}
+			finalTakeProfit := tt.aiNewTakeProfit
+			if finalTakeProfit <= 0 {
+				finalTakeProfit = tt.memoryTakeProfit
+			}
+
+			// 驗證最終價格
+			if finalStopLoss != tt.expectFinalSL {
+				t.Errorf("最終止損價格錯誤: got = %.2f, 期望 = %.2f", finalStopLoss, tt.expectFinalSL)
+			}
+			if finalTakeProfit != tt.expectFinalTP {
+				t.Errorf("最終止盈價格錯誤: got = %.2f, 期望 = %.2f", finalTakeProfit, tt.expectFinalTP)
+			}
+
+			// 驗證是否應該調用設置止損止盈
+			shouldSetSL := finalStopLoss > 0
+			shouldSetTP := finalTakeProfit > 0
+
+			if shouldSetSL != tt.expectSLRecovered {
+				t.Errorf("止損設置邏輯錯誤: shouldSet = %v, 期望 = %v", shouldSetSL, tt.expectSLRecovered)
+			}
+			if shouldSetTP != tt.expectTPRecovered {
+				t.Errorf("止盈設置邏輯錯誤: shouldSet = %v, 期望 = %v", shouldSetTP, tt.expectTPRecovered)
+			}
+		})
+	}
+}
+
 // TestPartialCloseEdgeCases 測試邊界情況
 func TestPartialCloseEdgeCases(t *testing.T) {
 	tests := []struct {

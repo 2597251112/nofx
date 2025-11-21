@@ -1347,9 +1347,10 @@ func (at *AutoTrader) executePartialCloseWithRecord(decision *decision.Decision,
 	// ✅ Step 4: 重新创建止盈止损订单（使用剩余数量）
 	// 部分平仓时，CloseLong/CloseShort 会取消所有挂单（因为原订单数量不正确）
 	// 需要用剩余数量重新创建 SL/TP 订单
-	// 优先使用 AI 提供的新价格，否则使用原始价格
-	originalStopLoss, _ := targetPosition["stopLoss"].(float64)
-	originalTakeProfit, _ := targetPosition["takeProfit"].(float64)
+	// 优先使用 AI 提供的新价格，否则使用内存中缓存的原始价格
+	posKey := decision.Symbol + "_" + strings.ToLower(positionSide)
+	originalStopLoss := at.positionStopLoss[posKey]
+	originalTakeProfit := at.positionTakeProfit[posKey]
 
 	// 确定最终使用的 SL/TP 价格
 	finalStopLoss := decision.NewStopLoss
