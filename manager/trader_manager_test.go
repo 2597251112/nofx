@@ -7,77 +7,70 @@ import (
 	"time"
 )
 
-// TestRemoveTrader 测试从内存中移除trader
-func TestRemoveTrader(t *testing.T) {
-	tm := NewTraderManager()
-
-	// 创建一个真实的 AutoTrader 实例
-	traderID := "test-trader-123"
-	cfg := trader.AutoTraderConfig{
-		ID:             traderID,
-		Name:           "Test Trader",
-		InitialBalance: 1000,
-		ScanInterval:   1 * time.Minute,
-	}
-	at, _ := trader.NewAutoTrader(cfg, nil, "user1")
-	
-	tm.traders[traderID] = at
-
-	// 验证 trader 存在
-	if _, exists := tm.traders[traderID]; !exists {
-		t.Fatal("trader 应该存在于 map 中")
-	}
-
-	// 调用 RemoveTrader
-	tm.RemoveTrader(traderID)
-
-	// 验证 trader 已被移除
-	if _, exists := tm.traders[traderID]; exists {
-		t.Error("trader 应该已从 map 中移除")
-	}
-}
-
-// TestRemoveTrader_StopsRunningTrader 测试移除正在运行的 trader 时会自动停止它
-func TestRemoveTrader_StopsRunningTrader(t *testing.T) {
-	tm := NewTraderManager()
-	traderID := "test-trader-running"
-
-	// 创建一个真实的 AutoTrader 实例
-	cfg := trader.AutoTraderConfig{
-		ID:             traderID,
-		Name:           "Test Running Trader",
-		InitialBalance: 1000,
-		ScanInterval:   100 * time.Millisecond, // 短间隔
-	}
-	at, _ := trader.NewAutoTrader(cfg, nil, "user1")
-
-	tm.traders[traderID] = at
-
-	// 启动一个 goroutine 运行 trader
-	go func() {
-		at.Run()
-	}()
-
-	// 等待 trader 启动完成
-	time.Sleep(50 * time.Millisecond)
-
-	// 验证正在运行（使用线程安全的 IsRunning 方法）
-	if !at.IsRunning() {
-		t.Fatal("Trader 应该是运行状态")
+// TestRemoveTrader_Scenarios 测试移除 Trader 的不同场景
+func TestRemoveTrader_Scenarios(t *testing.T) {
+	tests := []struct {
+		name          string
+		traderID      string
+		setupRunning  bool
+		scanInterval  time.Duration
+		expectExists  bool
+		expectRunning bool
+	}{
+		{
+			name:          "Remove idle trader",
+			traderID:      "test-trader-idle",
+			setupRunning:  false,
+			scanInterval:  1 * time.Minute,
+			expectExists:  false,
+			expectRunning: false,
+		},
+		{
+			name:          "Remove running trader",
+			traderID:      "test-trader-running",
+			setupRunning:  true,
+			scanInterval:  100 * time.Millisecond,
+			expectExists:  false,
+			expectRunning: false,
+		},
 	}
 
-	// 调用 RemoveTrader
-	// 期望：RemoveTrader 会调用 at.Stop()，这将导致 at.Run() 循环退出，并设置 isRunning=false
-	tm.RemoveTrader(traderID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tm := NewTraderManager()
 
-	// 验证 trader 已被移除
-	if _, exists := tm.traders[traderID]; exists {
-		t.Error("trader 应该已从 map 中移除")
-	}
+			// 创建 AutoTrader 实例
+			cfg := trader.AutoTraderConfig{
+				ID:             tt.traderID,
+				Name:           "Test Trader",
+				InitialBalance: 1000,
+				ScanInterval:   tt.scanInterval,
+			}
+			at, _ := trader.NewAutoTrader(cfg, nil, "user1")
+			tm.traders[tt.traderID] = at
 
-	// 验证 trader 已停止
-	if at.IsRunning() {
-		t.Error("Trader 应该已经被停止")
+			// 如果需要，启动 Trader
+			if tt.setupRunning {
+				go at.Run()
+				time.Sleep(50 * time.Millisecond) // 等待启动
+				if !at.IsRunning() {
+					t.Fatal("Trader 应该是运行状态")
+				}
+			}
+
+			// 执行移除
+			tm.RemoveTrader(tt.traderID)
+
+			// 验证是否存在
+			if _, exists := tm.traders[tt.traderID]; exists != tt.expectExists {
+				t.Errorf("Trader 存在状态错误: got %v, want %v", exists, tt.expectExists)
+			}
+
+			// 验证是否运行
+			if at.IsRunning() != tt.expectRunning {
+				t.Errorf("Trader 运行状态错误: got %v, want %v", at.IsRunning(), tt.expectRunning)
+			}
+		})
 	}
 }
 
@@ -141,242 +134,150 @@ func TestGetTrader_AfterRemove(t *testing.T) {
 	}
 }
 
-// TestAddTraderFromDB_OpenAIProvider 测试添加使用 OpenAI provider 的交易员时正确设置 API Key
-func TestAddTraderFromDB_OpenAIProvider(t *testing.T) {
-	tm := NewTraderManager()
-
-	// 准备测试数据
-	traderCfg := &config.TraderRecord{
-		ID:                  "test-trader-openai",
-		UserID:              "test-user",
-		Name:                "Test OpenAI Trader",
-		AIModelID:           "test-openai-model",
-		ExchangeID:          "binance",
-		InitialBalance:      10000,
-		ScanIntervalMinutes: 3,
-		IsRunning:           false,
-		BTCETHLeverage:      10,
-		AltcoinLeverage:     5,
-		IsCrossMargin:       true,
-		TradingSymbols:      "BTC,ETH",
+// TestAddTraderFromDB_Providers 测试不同 AI Provider 的配置加载
+func TestAddTraderFromDB_Providers(t *testing.T) {
+	tests := []struct {
+		name            string
+		provider        string
+		apiKey          string
+		customURL       string
+		customModel     string
+		expectAIModel   string
+		expectCustomKey string
+		expectCustomURL string
+		expectModelName string
+	}{
+		{
+			name:            "OpenAI Provider",
+			provider:        "openai",
+			apiKey:          "test-api-key-12345",
+			customURL:       "https://api.openai.com/v1",
+			customModel:     "gpt-4",
+			expectAIModel:   "openai",
+			expectCustomKey: "test-api-key-12345",
+			expectCustomURL: "https://api.openai.com/v1",
+			expectModelName: "gpt-4",
+		},
+		{
+			name:            "Anthropic Provider",
+			provider:        "anthropic",
+			apiKey:          "test-anthropic-key",
+			customURL:       "https://api.anthropic.com/v1",
+			customModel:     "claude-3-opus",
+			expectAIModel:   "anthropic",
+			expectCustomKey: "test-anthropic-key",
+			expectCustomURL: "https://api.anthropic.com/v1",
+			expectModelName: "claude-3-opus",
+		},
+		{
+			name:            "Gemini Provider",
+			provider:        "gemini",
+			apiKey:          "test-gemini-key-12345",
+			customURL:       "https://generativelanguage.googleapis.com/v1beta/openai",
+			customModel:     "gemini-2.0-flash-exp",
+			expectAIModel:   "gemini",
+			expectCustomKey: "test-gemini-key-12345",
+			expectCustomURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+			expectModelName: "gemini-2.0-flash-exp",
+		},
+		{
+			name:            "Groq Provider",
+			provider:        "groq",
+			apiKey:          "test-groq-key-67890",
+			customURL:       "https://api.groq.com/openai/v1",
+			customModel:     "llama-3.3-70b-versatile",
+			expectAIModel:   "groq",
+			expectCustomKey: "test-groq-key-67890",
+			expectCustomURL: "https://api.groq.com/openai/v1",
+			expectModelName: "llama-3.3-70b-versatile",
+		},
 	}
 
-	aiModelCfg := &config.AIModelConfig{
-		ID:              "test-openai-model",
-		UserID:          "test-user",
-		Name:            "Test OpenAI",
-		Provider:        "openai",
-		Enabled:         true,
-		APIKey:          "test-api-key-12345",
-		CustomAPIURL:    "https://api.openai.com/v1",
-		CustomModelName: "gpt-4",
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tm := NewTraderManager()
+			traderID := "test-trader-" + tt.provider
 
-	exchangeCfg := &config.ExchangeConfig{
-		ID:        "binance",
-		UserID:    "test-user",
-		Name:      "Binance",
-		Type:      "binance",
-		Enabled:   true,
-		APIKey:    "binance-api-key",
-		SecretKey: "binance-secret-key",
-		Testnet:   false,
-	}
+			// 准备测试数据
+			traderCfg := &config.TraderRecord{
+				ID:                  traderID,
+				UserID:              "test-user",
+				Name:                "Test Trader",
+				AIModelID:           "test-model-" + tt.provider,
+				ExchangeID:          "binance",
+				InitialBalance:      10000,
+				ScanIntervalMinutes: 3,
+				IsRunning:           false,
+				BTCETHLeverage:      10,
+				AltcoinLeverage:     5,
+				IsCrossMargin:       true,
+				TradingSymbols:      "BTC,ETH",
+			}
 
-	// 调用 addTraderFromDB (内部方法，需要先获取锁)
-	err := tm.addTraderFromDB(
-		traderCfg,
-		aiModelCfg,
-		exchangeCfg,
-		"",    // coinPoolURL
-		"",    // oiTopURL
-		10.0,  // maxDailyLoss
-		20.0,  // maxDrawdown
-		60,    // stopTradingMinutes
-		[]string{"BTC", "ETH"}, // defaultCoins
-		nil,   // database (可以为 nil，因为我们只测试配置)
-		"test-user",
-	)
+			aiModelCfg := &config.AIModelConfig{
+				ID:              "test-model-" + tt.provider,
+				UserID:          "test-user",
+				Name:            "Test AI",
+				Provider:        tt.provider,
+				Enabled:         true,
+				APIKey:          tt.apiKey,
+				CustomAPIURL:    tt.customURL,
+				CustomModelName: tt.customModel,
+			}
 
-	if err != nil {
-		t.Fatalf("添加交易员失败: %v", err)
-	}
+			exchangeCfg := &config.ExchangeConfig{
+				ID:        "binance",
+				UserID:    "test-user",
+				Name:      "Binance",
+				Type:      "binance",
+				Enabled:   true,
+				APIKey:    "binance-api-key",
+				SecretKey: "binance-secret-key",
+				Testnet:   false,
+			}
 
-	// 验证交易员已添加
-	at, err := tm.GetTrader("test-trader-openai")
-	if err != nil {
-		t.Fatalf("获取交易员失败: %v", err)
-	}
+			// 调用 addTraderFromDB
+			err := tm.addTraderFromDB(
+				traderCfg,
+				aiModelCfg,
+				exchangeCfg,
+				"", "", 10.0, 20.0, 60,
+				[]string{"BTC", "ETH"},
+				nil,
+				"test-user",
+			)
 
-	if at == nil {
-		t.Fatal("交易员不应为 nil")
-	}
+			if err != nil {
+				t.Fatalf("添加交易员失败: %v", err)
+			}
 
-	// 验证配置是否正确设置
-	config := at.GetConfig()
+			// 验证交易员已添加
+			at, err := tm.GetTrader(traderID)
+			if err != nil {
+				t.Fatalf("获取交易员失败: %v", err)
+			}
+			if at == nil {
+				t.Fatal("交易员不应为 nil")
+			}
 
-	// 关键验证：OpenAI provider 应该被设置为 AIModel="openai"，并且 CustomAPIKey 应该被设置
-	if config.AIModel != "openai" {
-		t.Errorf("AIModel 应该是 'openai'，实际是 '%s'", config.AIModel)
-	}
+			// 验证配置
+			config := at.GetConfig()
 
-	if config.CustomAPIKey == "" {
-		t.Error("CustomAPIKey 不应为空，OpenAI provider 的 API Key 应该被正确设置")
-	}
+			if config.AIModel != tt.expectAIModel {
+				t.Errorf("AIModel 应该是 '%s'，实际是 '%s'", tt.expectAIModel, config.AIModel)
+			}
 
-	if config.CustomAPIKey != "test-api-key-12345" {
-		t.Errorf("CustomAPIKey 应该是 'test-api-key-12345'，实际是 '%s'", config.CustomAPIKey)
-	}
+			if config.CustomAPIKey != tt.expectCustomKey {
+				t.Errorf("CustomAPIKey 应该是 '%s'，实际是 '%s'", tt.expectCustomKey, config.CustomAPIKey)
+			}
 
-	if config.CustomAPIURL != "https://api.openai.com/v1" {
-		t.Errorf("CustomAPIURL 应该是 'https://api.openai.com/v1'，实际是 '%s'", config.CustomAPIURL)
-	}
+			if tt.expectCustomURL != "" && config.CustomAPIURL != tt.expectCustomURL {
+				t.Errorf("CustomAPIURL 应该是 '%s'，实际是 '%s'", tt.expectCustomURL, config.CustomAPIURL)
+			}
 
-	if config.CustomModelName != "gpt-4" {
-		t.Errorf("CustomModelName 应该是 'gpt-4'，实际是 '%s'", config.CustomModelName)
-	}
-}
-
-// TestAddTraderFromDB_GeminiProvider 测试添加使用 Gemini provider 的交易员
-func TestAddTraderFromDB_GeminiProvider(t *testing.T) {
-	tm := NewTraderManager()
-
-	traderCfg := &config.TraderRecord{
-		ID:                  "test-trader-gemini",
-		UserID:              "test-user",
-		Name:                "Test Gemini Trader",
-		AIModelID:           "test-gemini-model",
-		ExchangeID:          "binance",
-		InitialBalance:      10000,
-		ScanIntervalMinutes: 3,
-		BTCETHLeverage:      10,
-		AltcoinLeverage:     5,
-		IsCrossMargin:       true,
-	}
-
-	aiModelCfg := &config.AIModelConfig{
-		ID:              "test-gemini-model",
-		UserID:          "test-user",
-		Name:            "Test Gemini",
-		Provider:        "gemini",
-		Enabled:         true,
-		APIKey:          "test-gemini-key-12345",
-		CustomAPIURL:    "https://generativelanguage.googleapis.com/v1beta/openai",
-		CustomModelName: "gemini-2.0-flash-exp",
-	}
-
-	exchangeCfg := &config.ExchangeConfig{
-		ID:        "binance",
-		UserID:    "test-user",
-		Name:      "Binance",
-		Type:      "binance",
-		Enabled:   true,
-		APIKey:    "binance-api-key",
-		SecretKey: "binance-secret-key",
-	}
-
-	err := tm.addTraderFromDB(
-		traderCfg,
-		aiModelCfg,
-		exchangeCfg,
-		"", "", 10.0, 20.0, 60,
-		[]string{},
-		nil,
-		"test-user",
-	)
-
-	if err != nil {
-		t.Fatalf("添加交易员失败: %v", err)
-	}
-
-	at, _ := tm.GetTrader("test-trader-gemini")
-	cfg := at.GetConfig()
-
-	if cfg.AIModel != "gemini" {
-		t.Errorf("AIModel 应该是 'gemini'，实际是 '%s'", cfg.AIModel)
-	}
-
-	if cfg.CustomAPIKey != "test-gemini-key-12345" {
-		t.Errorf("CustomAPIKey 应该是 'test-gemini-key-12345'，实际是 '%s'", cfg.CustomAPIKey)
-	}
-
-	if cfg.CustomAPIURL != "https://generativelanguage.googleapis.com/v1beta/openai" {
-		t.Errorf("CustomAPIURL 不正确，实际是 '%s'", cfg.CustomAPIURL)
-	}
-
-	if cfg.CustomModelName != "gemini-2.0-flash-exp" {
-		t.Errorf("CustomModelName 应该是 'gemini-2.0-flash-exp'，实际是 '%s'", cfg.CustomModelName)
-	}
-}
-
-// TestAddTraderFromDB_GroqProvider 测试添加使用 Groq provider 的交易员
-func TestAddTraderFromDB_GroqProvider(t *testing.T) {
-	tm := NewTraderManager()
-
-	traderCfg := &config.TraderRecord{
-		ID:                  "test-trader-groq",
-		UserID:              "test-user",
-		Name:                "Test Groq Trader",
-		AIModelID:           "test-groq-model",
-		ExchangeID:          "binance",
-		InitialBalance:      10000,
-		ScanIntervalMinutes: 3,
-		BTCETHLeverage:      10,
-		AltcoinLeverage:     5,
-		IsCrossMargin:       true,
-	}
-
-	aiModelCfg := &config.AIModelConfig{
-		ID:              "test-groq-model",
-		UserID:          "test-user",
-		Name:            "Test Groq",
-		Provider:        "groq",
-		Enabled:         true,
-		APIKey:          "test-groq-key-67890",
-		CustomAPIURL:    "https://api.groq.com/openai/v1",
-		CustomModelName: "llama-3.3-70b-versatile",
-	}
-
-	exchangeCfg := &config.ExchangeConfig{
-		ID:        "binance",
-		UserID:    "test-user",
-		Name:      "Binance",
-		Type:      "binance",
-		Enabled:   true,
-		APIKey:    "binance-api-key",
-		SecretKey: "binance-secret-key",
-	}
-
-	err := tm.addTraderFromDB(
-		traderCfg,
-		aiModelCfg,
-		exchangeCfg,
-		"", "", 10.0, 20.0, 60,
-		[]string{},
-		nil,
-		"test-user",
-	)
-
-	if err != nil {
-		t.Fatalf("添加交易员失败: %v", err)
-	}
-
-	at, _ := tm.GetTrader("test-trader-groq")
-	cfg := at.GetConfig()
-
-	if cfg.AIModel != "groq" {
-		t.Errorf("AIModel 应该是 'groq'，实际是 '%s'", cfg.AIModel)
-	}
-
-	if cfg.CustomAPIKey != "test-groq-key-67890" {
-		t.Errorf("CustomAPIKey 应该是 'test-groq-key-67890'，实际是 '%s'", cfg.CustomAPIKey)
-	}
-
-	if cfg.CustomAPIURL != "https://api.groq.com/openai/v1" {
-		t.Errorf("CustomAPIURL 不正确，实际是 '%s'", cfg.CustomAPIURL)
-	}
-
-	if cfg.CustomModelName != "llama-3.3-70b-versatile" {
-		t.Errorf("CustomModelName 应该是 'llama-3.3-70b-versatile'，实际是 '%s'", cfg.CustomModelName)
+			if tt.expectModelName != "" && config.CustomModelName != tt.expectModelName {
+				t.Errorf("CustomModelName 应该是 '%s'，实际是 '%s'", tt.expectModelName, config.CustomModelName)
+			}
+		})
 	}
 }
