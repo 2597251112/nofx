@@ -19,6 +19,14 @@ const (
 
 var (
 	DefaultTimeout = 120 * time.Second
+
+	// DefaultProviderURLs 各 provider 的默认 API URL
+	// 新增 provider 时只需在此 map 中添加即可
+	DefaultProviderURLs = map[string]string{
+		"openai": "https://api.openai.com/v1",
+		"gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
+		"groq":   "https://api.groq.com/openai/v1",
+	}
 )
 
 // Client AI API配置
@@ -54,10 +62,19 @@ func New() AIClient {
 	}
 }
 
-// SetCustomAPI 设置自定义OpenAI兼容API
-func (client *Client) SetAPIKey(apiKey, apiURL, customModel string) {
-	client.Provider = ProviderCustom
+// SetAPIKey 设置 API Key 和配置
+// provider: 指定 AI 提供商 (openai, gemini, groq, custom 等)
+// 如果 apiURL 为空，会根据 provider 使用默认 URL
+func (client *Client) SetAPIKey(apiKey, apiURL, customModel, provider string) {
+	client.Provider = provider
 	client.APIKey = apiKey
+
+	// 如果 URL 为空，根据 provider 使用默认 URL
+	if apiURL == "" {
+		if defaultURL, ok := DefaultProviderURLs[provider]; ok {
+			apiURL = defaultURL
+		}
+	}
 
 	// 检查URL是否以#结尾，如果是则使用完整URL（不添加/chat/completions）
 	if strings.HasSuffix(apiURL, "#") {
@@ -68,7 +85,9 @@ func (client *Client) SetAPIKey(apiKey, apiURL, customModel string) {
 		client.UseFullURL = false
 	}
 
-	client.Model = customModel
+	if customModel != "" {
+		client.Model = customModel
+	}
 	client.Timeout = 120 * time.Second
 }
 

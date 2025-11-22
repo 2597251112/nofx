@@ -42,7 +42,7 @@ func TestClient_BaseURL_SlashHandling(t *testing.T) {
 	t.Run("With Trailing Slash", func(t *testing.T) {
 		client := New().(*Client)
 		// 故意在 URL 末尾加斜杠
-		client.SetAPIKey("test-key", server.URL+"/", "test-model")
+		client.SetAPIKey("test-key", server.URL+"/", "test-model", "custom")
 		client.Timeout = 1 * time.Second
 
 		// 我们需要一种方式来验证 client 确实生成了正确的 URL 字符串。
@@ -71,12 +71,50 @@ func TestClient_BaseURL_SlashHandling(t *testing.T) {
 func TestClient_URL_Construction_Logic(t *testing.T) {
     // 这是一个更直接的单元测试，不需要启动 server
     client := New().(*Client)
-    client.SetAPIKey("key", "http://example.com/", "model")
-    
+    client.SetAPIKey("key", "http://example.com/", "model", "custom")
+
     // 由于 callOnce 内部拼接 URL 逻辑是硬编码的，我们无法直接通过公开方法获取 URL。
     // 但我们可以通过测试 SetAPIKey 的副作用（BaseURL 字段）。
     // 等等，我们的修复是修改 callOnce 内部的拼接逻辑，而不是 SetAPIKey。
     // 所以 BaseURL 字段本身还是带斜杠的。
-    
+
     // 那么我们必须通过 mock http.Client 或者 httptest server 来验证实际发出的请求 URL。
+}
+
+// TestSetAPIKey_DefaultURLs 测试 SetAPIKey 在 URL 为空时使用默认 URL
+func TestSetAPIKey_DefaultURLs(t *testing.T) {
+	// 测试所有在 DefaultProviderURLs 中定义的 provider
+	for provider, expectedURL := range DefaultProviderURLs {
+		t.Run(provider+"_with_empty_URL_uses_default", func(t *testing.T) {
+			client := New().(*Client)
+			client.SetAPIKey("test-api-key", "", "test-model", provider)
+
+			assert.Equal(t, expectedURL, client.BaseURL, "BaseURL should use default for "+provider)
+			assert.Equal(t, provider, client.Provider, "Provider should be set")
+		})
+
+		t.Run(provider+"_with_custom_URL_keeps_custom", func(t *testing.T) {
+			client := New().(*Client)
+			customURL := "https://custom.proxy.com/v1"
+			client.SetAPIKey("test-api-key", customURL, "test-model", provider)
+
+			assert.Equal(t, customURL, client.BaseURL, "BaseURL should keep custom URL")
+		})
+	}
+
+	// 测试未知 provider
+	t.Run("Unknown_provider_with_empty_URL_keeps_empty", func(t *testing.T) {
+		client := New().(*Client)
+		client.SetAPIKey("test-api-key", "", "test-model", "unknown")
+
+		assert.Equal(t, "", client.BaseURL, "BaseURL should be empty for unknown provider")
+	})
+
+	// 测试 custom provider
+	t.Run("Custom_provider_with_URL_keeps_URL", func(t *testing.T) {
+		client := New().(*Client)
+		client.SetAPIKey("test-api-key", "https://my-api.com/v1", "test-model", "custom")
+
+		assert.Equal(t, "https://my-api.com/v1", client.BaseURL, "BaseURL should keep custom URL")
+	})
 }

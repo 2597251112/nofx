@@ -4,7 +4,7 @@ import "net/http"
 
 // AIClient AI客户端接口
 type AIClient interface {
-	SetAPIKey(apiKey string, customURL string, customModel string)
+	SetAPIKey(apiKey string, customURL string, customModel string, provider string)
 	// CallWithMessages 使用 system + user prompt 调用AI API
 	CallWithMessages(systemPrompt, userPrompt string) (string, error)
 

@@ -135,20 +135,24 @@ func NewAutoTrader(config AutoTraderConfig, database interface{}, userID string)
 	// 初始化AI
 	if config.AIModel == "custom" {
 		// 使用自定义API
-		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
+		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName, "custom")
 		log.Printf("🤖 [%s] 使用自定义AI API: %s (模型: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
 	} else if config.AIModel == "openai" {
-		// 使用 OpenAI 兼容 API
-		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
-		log.Printf("🤖 [%s] 使用 OpenAI API: %s (模型: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
-	} else if config.AIModel == "anthropic" {
-		// 使用 Anthropic 兼容 API
-		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
-		log.Printf("🤖 [%s] 使用 Anthropic API: %s (模型: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
+		// 使用 OpenAI API（URL 为空时使用默认）
+		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName, "openai")
+		log.Printf("🤖 [%s] 使用 OpenAI API (模型: %s)", config.Name, config.CustomModelName)
+	} else if config.AIModel == "gemini" {
+		// 使用 Google Gemini OpenAI 兼容 API（URL 为空时使用默认）
+		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName, "gemini")
+		log.Printf("🤖 [%s] 使用 Gemini API (模型: %s)", config.Name, config.CustomModelName)
+	} else if config.AIModel == "groq" {
+		// 使用 Groq OpenAI 兼容 API（URL 为空时使用默认）
+		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName, "groq")
+		log.Printf("🤖 [%s] 使用 Groq API (模型: %s)", config.Name, config.CustomModelName)
 	} else if config.UseQwen || config.AIModel == "qwen" {
 		// 使用Qwen (支持自定义URL和Model)
 		mcpClient = mcp.NewQwenClient()
-		mcpClient.SetAPIKey(config.QwenKey, config.CustomAPIURL, config.CustomModelName)
+		mcpClient.SetAPIKey(config.QwenKey, config.CustomAPIURL, config.CustomModelName, "qwen")
 		if config.CustomAPIURL != "" || config.CustomModelName != "" {
 			log.Printf("🤖 [%s] 使用阿里云Qwen AI (自定义URL: %s, 模型: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
 		} else {
@@ -157,7 +161,7 @@ func NewAutoTrader(config AutoTraderConfig, database interface{}, userID string)
 	} else {
 		// 默认使用DeepSeek (支持自定义URL和Model)
 		mcpClient = mcp.NewDeepSeekClient()
-		mcpClient.SetAPIKey(config.DeepSeekKey, config.CustomAPIURL, config.CustomModelName)
+		mcpClient.SetAPIKey(config.DeepSeekKey, config.CustomAPIURL, config.CustomModelName, "deepseek")
 		if config.CustomAPIURL != "" || config.CustomModelName != "" {
 			log.Printf("🤖 [%s] 使用DeepSeek AI (自定义URL: %s, 模型: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
 		} else {

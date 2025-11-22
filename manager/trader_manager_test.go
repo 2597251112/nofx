@@ -237,15 +237,15 @@ func TestAddTraderFromDB_OpenAIProvider(t *testing.T) {
 	}
 }
 
-// TestAddTraderFromDB_AnthropicProvider 测试添加使用 Anthropic provider 的交易员
-func TestAddTraderFromDB_AnthropicProvider(t *testing.T) {
+// TestAddTraderFromDB_GeminiProvider 测试添加使用 Gemini provider 的交易员
+func TestAddTraderFromDB_GeminiProvider(t *testing.T) {
 	tm := NewTraderManager()
 
 	traderCfg := &config.TraderRecord{
-		ID:                  "test-trader-anthropic",
+		ID:                  "test-trader-gemini",
 		UserID:              "test-user",
-		Name:                "Test Anthropic Trader",
-		AIModelID:           "test-anthropic-model",
+		Name:                "Test Gemini Trader",
+		AIModelID:           "test-gemini-model",
 		ExchangeID:          "binance",
 		InitialBalance:      10000,
 		ScanIntervalMinutes: 3,
@@ -255,14 +255,14 @@ func TestAddTraderFromDB_AnthropicProvider(t *testing.T) {
 	}
 
 	aiModelCfg := &config.AIModelConfig{
-		ID:              "test-anthropic-model",
+		ID:              "test-gemini-model",
 		UserID:          "test-user",
-		Name:            "Test Anthropic",
-		Provider:        "anthropic",
+		Name:            "Test Gemini",
+		Provider:        "gemini",
 		Enabled:         true,
-		APIKey:          "test-anthropic-key",
-		CustomAPIURL:    "https://api.anthropic.com/v1",
-		CustomModelName: "claude-3-opus",
+		APIKey:          "test-gemini-key-12345",
+		CustomAPIURL:    "https://generativelanguage.googleapis.com/v1beta/openai",
+		CustomModelName: "gemini-2.0-flash-exp",
 	}
 
 	exchangeCfg := &config.ExchangeConfig{
@@ -289,14 +289,94 @@ func TestAddTraderFromDB_AnthropicProvider(t *testing.T) {
 		t.Fatalf("添加交易员失败: %v", err)
 	}
 
-	at, _ := tm.GetTrader("test-trader-anthropic")
-	config := at.GetConfig()
+	at, _ := tm.GetTrader("test-trader-gemini")
+	cfg := at.GetConfig()
 
-	if config.AIModel != "anthropic" {
-		t.Errorf("AIModel 应该是 'anthropic'，实际是 '%s'", config.AIModel)
+	if cfg.AIModel != "gemini" {
+		t.Errorf("AIModel 应该是 'gemini'，实际是 '%s'", cfg.AIModel)
 	}
 
-	if config.CustomAPIKey != "test-anthropic-key" {
-		t.Errorf("CustomAPIKey 应该是 'test-anthropic-key'，实际是 '%s'", config.CustomAPIKey)
+	if cfg.CustomAPIKey != "test-gemini-key-12345" {
+		t.Errorf("CustomAPIKey 应该是 'test-gemini-key-12345'，实际是 '%s'", cfg.CustomAPIKey)
+	}
+
+	if cfg.CustomAPIURL != "https://generativelanguage.googleapis.com/v1beta/openai" {
+		t.Errorf("CustomAPIURL 不正确，实际是 '%s'", cfg.CustomAPIURL)
+	}
+
+	if cfg.CustomModelName != "gemini-2.0-flash-exp" {
+		t.Errorf("CustomModelName 应该是 'gemini-2.0-flash-exp'，实际是 '%s'", cfg.CustomModelName)
+	}
+}
+
+// TestAddTraderFromDB_GroqProvider 测试添加使用 Groq provider 的交易员
+func TestAddTraderFromDB_GroqProvider(t *testing.T) {
+	tm := NewTraderManager()
+
+	traderCfg := &config.TraderRecord{
+		ID:                  "test-trader-groq",
+		UserID:              "test-user",
+		Name:                "Test Groq Trader",
+		AIModelID:           "test-groq-model",
+		ExchangeID:          "binance",
+		InitialBalance:      10000,
+		ScanIntervalMinutes: 3,
+		BTCETHLeverage:      10,
+		AltcoinLeverage:     5,
+		IsCrossMargin:       true,
+	}
+
+	aiModelCfg := &config.AIModelConfig{
+		ID:              "test-groq-model",
+		UserID:          "test-user",
+		Name:            "Test Groq",
+		Provider:        "groq",
+		Enabled:         true,
+		APIKey:          "test-groq-key-67890",
+		CustomAPIURL:    "https://api.groq.com/openai/v1",
+		CustomModelName: "llama-3.3-70b-versatile",
+	}
+
+	exchangeCfg := &config.ExchangeConfig{
+		ID:        "binance",
+		UserID:    "test-user",
+		Name:      "Binance",
+		Type:      "binance",
+		Enabled:   true,
+		APIKey:    "binance-api-key",
+		SecretKey: "binance-secret-key",
+	}
+
+	err := tm.addTraderFromDB(
+		traderCfg,
+		aiModelCfg,
+		exchangeCfg,
+		"", "", 10.0, 20.0, 60,
+		[]string{},
+		nil,
+		"test-user",
+	)
+
+	if err != nil {
+		t.Fatalf("添加交易员失败: %v", err)
+	}
+
+	at, _ := tm.GetTrader("test-trader-groq")
+	cfg := at.GetConfig()
+
+	if cfg.AIModel != "groq" {
+		t.Errorf("AIModel 应该是 'groq'，实际是 '%s'", cfg.AIModel)
+	}
+
+	if cfg.CustomAPIKey != "test-groq-key-67890" {
+		t.Errorf("CustomAPIKey 应该是 'test-groq-key-67890'，实际是 '%s'", cfg.CustomAPIKey)
+	}
+
+	if cfg.CustomAPIURL != "https://api.groq.com/openai/v1" {
+		t.Errorf("CustomAPIURL 不正确，实际是 '%s'", cfg.CustomAPIURL)
+	}
+
+	if cfg.CustomModelName != "llama-3.3-70b-versatile" {
+		t.Errorf("CustomModelName 应该是 'llama-3.3-70b-versatile'，实际是 '%s'", cfg.CustomModelName)
 	}
 }
