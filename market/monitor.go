@@ -10,20 +10,21 @@ import (
 )
 
 type WSMonitor struct {
-	wsClient       *WSClient
-	combinedClient *CombinedStreamsClient
-	symbols        []string
-	featuresMap    sync.Map
-	alertsChan     chan Alert
-	klineDataMap3m sync.Map // 存储每个交易对的K线历史数据
+	wsClient        *WSClient
+	combinedClient  *CombinedStreamsClient
+	symbols         []string
+	featuresMap     sync.Map
+	alertsChan      chan Alert
+	klineDataMap3m  sync.Map // 存储每个交易对的K线历史数据
 	klineDataMap15m sync.Map // 存储每个交易对的15分钟K线历史数据
-	klineDataMap1h sync.Map // 存储每个交易对的1小时K线历史数据
-	klineDataMap4h sync.Map // 存储每个交易对的K线历史数据
-	tickerDataMap  sync.Map // 存储每个交易对的ticker数据
-	batchSize      int
-	filterSymbols  sync.Map // 使用sync.Map来存储需要监控的币种和其状态
-	symbolStats    sync.Map // 存储币种统计信息
-	FilterSymbol   []string //经过筛选的币种
+	klineDataMap1h  sync.Map // 存储每个交易对的1小时K线历史数据
+	klineDataMap4h  sync.Map // 存储每个交易对的4小时K线历史数据
+	klineDataMap1d  sync.Map // 存储每个交易对的日线K线历史数据
+	tickerDataMap   sync.Map // 存储每个交易对的ticker数据
+	batchSize       int
+	filterSymbols   sync.Map // 使用sync.Map来存储需要监控的币种和其状态
+	symbolStats     sync.Map // 存储币种统计信息
+	FilterSymbol    []string //经过筛选的币种
 }
 type SymbolStats struct {
 	LastActiveTime   time.Time
@@ -41,7 +42,7 @@ type KlineCacheEntry struct {
 }
 
 var WSMonitorCli *WSMonitor
-var subKlineTime = []string{"3m", "15m", "1h", "4h"} // 管理订阅流的K线周期
+var subKlineTime = []string{"3m", "15m", "1h", "4h", "1d"} // 管理订阅流的K线周期
 
 func NewWSMonitor(batchSize int) *WSMonitor {
 	WSMonitorCli = &WSMonitor{
@@ -157,6 +158,21 @@ func (m *WSMonitor) initializeHistoricalData() error {
 				m.klineDataMap4h.Store(s, entry4h)
 				log.Printf("已加载 %s 的历史K线数据-4h: %d 条", s, len(klines4h))
 			}
+
+			// 获取历史K线数据 - 1d
+			klines1d, err := apiClient.GetKlines(s, "1d", 100)
+			if err != nil {
+				log.Printf("获取 %s 历史数据失败: %v", s, err)
+				return
+			}
+			if len(klines1d) > 0 {
+				entry1d := &KlineCacheEntry{
+					Klines:     klines1d,
+					ReceivedAt: time.Now(),
+				}
+				m.klineDataMap1d.Store(s, entry1d)
+				log.Printf("已加载 %s 的历史K线数据-1d: %d 条", s, len(klines1d))
+			}
 		}(symbol)
 	}
 
@@ -236,6 +252,8 @@ func (m *WSMonitor) getKlineDataMap(_time string) *sync.Map {
 		klineDataMap = &m.klineDataMap1h
 	} else if _time == "4h" {
 		klineDataMap = &m.klineDataMap4h
+	} else if _time == "1d" {
+		klineDataMap = &m.klineDataMap1d
 	} else {
 		klineDataMap = &sync.Map{}
 	}

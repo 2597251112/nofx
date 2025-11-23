@@ -60,6 +60,12 @@ func Get(symbol string) (*Data, error) {
 		return nil, fmt.Errorf("获取4小时K线失败: %v", err)
 	}
 
+	// 获取日线K线数据
+	klines1d, err := WSMonitorCli.GetCurrentKlines(symbol, "1d")
+	if err != nil {
+		return nil, fmt.Errorf("获取日线K线失败: %v", err)
+	}
+
 	// 检查数据是否为空
 	if len(klines3m) == 0 {
 		return nil, fmt.Errorf("3分钟K线数据为空")
@@ -72,6 +78,9 @@ func Get(symbol string) (*Data, error) {
 	}
 	if len(klines1h) == 0 {
 		return nil, fmt.Errorf("1小时K线数据为空")
+	}
+	if len(klines1d) == 0 {
+		return nil, fmt.Errorf("日线K线数据为空")
 	}
 
 	// 计算当前指标 (基于3分钟最新数据)
@@ -99,6 +108,15 @@ func Get(symbol string) (*Data, error) {
 		}
 	}
 
+	// 24小时价格变化 = 1个日线K线前的价格
+	priceChange24h := 0.0
+	if len(klines1d) >= 2 {
+		price24hAgo := klines1d[len(klines1d)-2].Close
+		if price24hAgo > 0 {
+			priceChange24h = ((currentPrice - price24hAgo) / price24hAgo) * 100
+		}
+	}
+
 	// 获取OI数据
 	oiData, err := getOpenInterestData(symbol)
 	if err != nil {
@@ -121,11 +139,15 @@ func Get(symbol string) (*Data, error) {
 	// 计算长期数据
 	longerTermData := calculateLongerTermData(klines4h)
 
+	// 计算日线数据
+	dailyData := calculateDailyData(klines1d)
+
 	return &Data{
 		Symbol:            symbol,
 		CurrentPrice:      currentPrice,
 		PriceChange1h:     priceChange1h,
 		PriceChange4h:     priceChange4h,
+		PriceChange24h:    priceChange24h,
 		CurrentEMA20:      currentEMA20,
 		CurrentMACD:       currentMACD,
 		CurrentRSI7:       currentRSI7,
@@ -135,6 +157,7 @@ func Get(symbol string) (*Data, error) {
 		MidTermSeries15m:  midTermData15m,
 		MidTermSeries1h:   midTermData1h,
 		LongerTermContext: longerTermData,
+		DailyContext:      dailyData,
 	}, nil
 }
 
@@ -448,6 +471,55 @@ func calculateLongerTermData(klines []Kline) *LongerTermData {
 	return data
 }
 
+// calculateDailyData 计算日线数据
+func calculateDailyData(klines []Kline) *DailyData {
+	data := &DailyData{
+		MidPrices:   make([]float64, 0, 10),
+		EMA20Values: make([]float64, 0, 10),
+		MACDValues:  make([]float64, 0, 10),
+		RSI14Values: make([]float64, 0, 10),
+		Volume:      make([]float64, 0, 10),
+	}
+
+	// 计算EMA
+	data.EMA20 = calculateEMA(klines, 20)
+	data.EMA50 = calculateEMA(klines, 50)
+
+	// 计算ATR
+	data.ATR14 = calculateATR(klines, 14)
+
+	// 获取最近10个数据点
+	start := len(klines) - 10
+	if start < 0 {
+		start = 0
+	}
+
+	for i := start; i < len(klines); i++ {
+		data.MidPrices = append(data.MidPrices, klines[i].Close)
+		data.Volume = append(data.Volume, klines[i].Volume)
+
+		// 计算每个点的EMA20
+		if i >= 19 {
+			ema20 := calculateEMA(klines[:i+1], 20)
+			data.EMA20Values = append(data.EMA20Values, ema20)
+		}
+
+		// 计算每个点的MACD
+		if i >= 25 {
+			macd := calculateMACD(klines[:i+1])
+			data.MACDValues = append(data.MACDValues, macd)
+		}
+
+		// 计算每个点的RSI
+		if i >= 14 {
+			rsi14 := calculateRSI(klines[:i+1], 14)
+			data.RSI14Values = append(data.RSI14Values, rsi14)
+		}
+	}
+
+	return data
+}
+
 // getOpenInterestData 获取OI数据
 func getOpenInterestData(symbol string) (*OIData, error) {
 	url := fmt.Sprintf("https://fapi.binance.com/fapi/v1/openInterest?symbol=%s", symbol)
@@ -541,8 +613,10 @@ func Format(data *Data, skipSymbolMention bool) string {
 
 	// 使用动态精度格式化价格
 	priceStr := formatPriceWithDynamicPrecision(data.CurrentPrice)
-	sb.WriteString(fmt.Sprintf("current_price = %s, current_ema20 = %.3f, current_macd = %.3f, current_rsi (7 period) = %.3f\n\n",
-		priceStr, data.CurrentEMA20, data.CurrentMACD, data.CurrentRSI7))
+	sb.WriteString(fmt.Sprintf("current_price = %s, price_change_1h = %.2f%%, price_change_4h = %.2f%%, price_change_24h = %.2f%%\n\n",
+		priceStr, data.PriceChange1h, data.PriceChange4h, data.PriceChange24h))
+	sb.WriteString(fmt.Sprintf("current_ema20 = %.3f, current_macd = %.3f, current_rsi (7 period) = %.3f\n\n",
+		data.CurrentEMA20, data.CurrentMACD, data.CurrentRSI7))
 
 	if skipSymbolMention {
 		sb.WriteString("Here is the latest open interest and funding rate for perps:\n\n")
@@ -562,7 +636,7 @@ func Format(data *Data, skipSymbolMention bool) string {
 	sb.WriteString(fmt.Sprintf("Funding Rate: %.2e\n\n", data.FundingRate))
 
 	if data.IntradaySeries != nil {
-		sb.WriteString("Intraday series (3‑minute intervals, oldest → latest):\n\n")
+		sb.WriteString("Intraday series (5‑minute intervals, oldest → latest):\n\n")
 
 		if len(data.IntradaySeries.MidPrices) > 0 {
 			sb.WriteString(fmt.Sprintf("Mid prices: %s\n\n", formatFloatSlice(data.IntradaySeries.MidPrices)))
@@ -672,6 +746,35 @@ func Format(data *Data, skipSymbolMention bool) string {
 		}
 	}
 
+	if data.DailyContext != nil {
+		sb.WriteString("Daily context (1‑day timeframe):\n\n")
+
+		sb.WriteString(fmt.Sprintf("20‑Period EMA: %.3f vs. 50‑Period EMA: %.3f\n\n",
+			data.DailyContext.EMA20, data.DailyContext.EMA50))
+
+		sb.WriteString(fmt.Sprintf("14‑Period ATR: %.3f\n\n", data.DailyContext.ATR14))
+
+		if len(data.DailyContext.MidPrices) > 0 {
+			sb.WriteString(fmt.Sprintf("Close prices: %s\n\n", formatFloatSlice(data.DailyContext.MidPrices)))
+		}
+
+		if len(data.DailyContext.EMA20Values) > 0 {
+			sb.WriteString(fmt.Sprintf("EMA indicators (20‑period): %s\n\n", formatFloatSlice(data.DailyContext.EMA20Values)))
+		}
+
+		if len(data.DailyContext.MACDValues) > 0 {
+			sb.WriteString(fmt.Sprintf("MACD indicators: %s\n\n", formatFloatSlice(data.DailyContext.MACDValues)))
+		}
+
+		if len(data.DailyContext.RSI14Values) > 0 {
+			sb.WriteString(fmt.Sprintf("RSI indicators (14‑Period): %s\n\n", formatFloatSlice(data.DailyContext.RSI14Values)))
+		}
+
+		if len(data.DailyContext.Volume) > 0 {
+			sb.WriteString(fmt.Sprintf("Volume: %s\n\n", formatFloatSlice(data.DailyContext.Volume)))
+		}
+	}
+
 	return sb.String()
 }
 
@@ -741,7 +844,10 @@ func parseFloat(v interface{}) (float64, error) {
 }
 
 // BuildDataFromKlines 根据预加载的K线序列构造市场数据快照（用于回测/模拟）。
-func BuildDataFromKlines(symbol string, primary []Kline, longer []Kline) (*Data, error) {
+// primary: 主要K线数据（如3m）
+// longer: 长期K线数据（如4h）
+// daily: 日线K线数据（可选，如果为空则不填充日线数据）
+func BuildDataFromKlines(symbol string, primary []Kline, longer []Kline, daily ...[]Kline) (*Data, error) {
 	if len(primary) == 0 {
 		return nil, fmt.Errorf("primary series is empty")
 	}
@@ -758,14 +864,28 @@ func BuildDataFromKlines(symbol string, primary []Kline, longer []Kline) (*Data,
 		CurrentRSI7:       calculateRSI(primary, 7),
 		PriceChange1h:     priceChangeFromSeries(primary, time.Hour),
 		PriceChange4h:     priceChangeFromSeries(primary, 4*time.Hour),
+		PriceChange24h:    priceChangeFromSeries(primary, 24*time.Hour),
 		OpenInterest:      &OIData{Latest: 0, Average: 0},
 		FundingRate:       0,
 		IntradaySeries:    calculateIntradaySeries(primary),
 		LongerTermContext: nil,
+		DailyContext:      nil,
 	}
 
 	if len(longer) > 0 {
 		data.LongerTermContext = calculateLongerTermData(longer)
+	}
+
+	// 处理可变参数日线数据
+	if len(daily) > 0 && len(daily[0]) > 0 {
+		data.DailyContext = calculateDailyData(daily[0])
+		// 如果有日线数据，使用日线数据计算更精确的24小时价格变化
+		if len(daily[0]) >= 2 {
+			price24hAgo := daily[0][len(daily[0])-2].Close
+			if price24hAgo > 0 {
+				data.PriceChange24h = ((currentPrice - price24hAgo) / price24hAgo) * 100
+			}
+		}
 	}
 
 	return data, nil

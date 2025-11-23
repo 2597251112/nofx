@@ -16,6 +16,7 @@ func TestCombinedStreamsClient_ReconnectResubscribes(t *testing.T) {
 		"btcusdt@kline_3m",
 		"ethusdt@kline_4h",
 		"solusdt@kline_3m",
+		"btcusdt@kline_1d",
 	}
 
 	client.mu.Lock()
@@ -144,6 +145,7 @@ func TestCombinedStreamsClient_GetSubscribersList(t *testing.T) {
 		"btcusdt@kline_3m",
 		"ethusdt@kline_4h",
 		"solusdt@kline_3m",
+		"btcusdt@kline_1d",
 	}
 
 	for _, stream := range expectedStreams {
@@ -160,8 +162,8 @@ func TestCombinedStreamsClient_GetSubscribersList(t *testing.T) {
 	}
 	client.mu.RUnlock()
 
-	if len(streams) != 3 {
-		t.Fatalf("应该获取到 3 个流，实际获取到 %d 个", len(streams))
+	if len(streams) != 4 {
+		t.Fatalf("应该获取到 4 个流，实际获取到 %d 个", len(streams))
 	}
 
 	t.Logf("✅ 可以从 subscribers map 获取到 %d 个流", len(streams))
