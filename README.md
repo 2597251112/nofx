@@ -119,6 +119,8 @@ openssl rand -base64 64
 
 # 6. 运行（prompts/ 目录已包含默认提示词）
 ./nofx
+
+# 7. 访问 http://localhost:8080
 ```
 
 ### Windows 部署 (Windows Deployment)
