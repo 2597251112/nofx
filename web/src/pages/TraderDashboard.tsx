@@ -396,6 +396,12 @@ export default function TraderDashboard() {
               <span className="whitespace-nowrap">Runtime: {status.runtime_minutes} min</span>
             </>
           )}
+          {selectedTrader.scan_interval_minutes && (
+            <>
+              <span className="hidden sm:inline">•</span>
+              <span className="whitespace-nowrap">Interval: {selectedTrader.scan_interval_minutes} min</span>
+            </>
+          )}
         </div>
       </div>
 

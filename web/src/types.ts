@@ -100,6 +100,7 @@ export interface TraderInfo {
   use_oi_top?: boolean
   system_prompt_template?: string
   system_prompt?: string // 完整的 system prompt 内容（用于查看）
+  scan_interval_minutes?: number
 }
 
 export interface AIModel {
