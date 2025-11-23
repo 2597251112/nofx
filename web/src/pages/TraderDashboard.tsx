@@ -25,6 +25,7 @@ import {
   Eye,
 } from 'lucide-react'
 import { stripLeadingIcons } from '../lib/text'
+import { ExchangeLink } from '../components/ExchangeLink'
 import type {
   SystemStatus,
   AccountInfo,
@@ -530,7 +531,10 @@ export default function TraderDashboard() {
                         className="border-b border-gray-800 last:border-0"
                       >
                         <td className="py-3 font-mono font-semibold">
-                          {pos.symbol}
+                          <ExchangeLink
+                            exchangeId={selectedTrader.exchange_id}
+                            symbol={pos.symbol}
+                          />
                         </td>
                         <td className="py-3">
                           <span
@@ -675,7 +679,12 @@ export default function TraderDashboard() {
           >
             {decisions && decisions.length > 0 ? (
               decisions.map((decision, i) => (
-                <DecisionCard key={i} decision={decision} language={language} />
+                <DecisionCard
+                  key={i}
+                  decision={decision}
+                  language={language}
+                  exchangeId={selectedTrader.exchange_id}
+                />
               ))
             ) : (
               <div className="py-16 text-center">
@@ -772,13 +781,15 @@ function StatCard({
   )
 }
 
-// Decision Card Component
+// DecisionCard Component
 function DecisionCard({
   decision,
   language,
+  exchangeId,
 }: {
   decision: DecisionRecord
   language: Language
+  exchangeId?: string
 }) {
   const [showInputPrompt, setShowInputPrompt] = useState(false)
   const [showCoT, setShowCoT] = useState(false)
@@ -886,12 +897,12 @@ function DecisionCard({
               className="flex items-center gap-2 text-sm rounded px-3 py-2"
               style={{ background: '#0B0E11' }}
             >
-              <span
+              <ExchangeLink
+                exchangeId={exchangeId}
+                symbol={action.symbol}
                 className="font-mono font-bold"
                 style={{ color: '#EAECEF' }}
-              >
-                {action.symbol}
-              </span>
+              />
               <span
                 className="px-2 py-0.5 rounded text-xs font-bold"
                 style={

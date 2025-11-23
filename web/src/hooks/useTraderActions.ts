@@ -338,7 +338,7 @@ export function useTraderActions({
       buildRequest: (models) => ({
         models: Object.fromEntries(
           models.map((model) => [
-            model.provider,
+            model.id, // 使用 id 而不是 provider，支持同一 provider 多个模型 (Issue #87)
             {
               enabled: model.enabled,
               api_key: model.apiKey || '',
@@ -410,7 +410,7 @@ export function useTraderActions({
       const request = {
         models: Object.fromEntries(
           updatedModels.map((model) => [
-            model.provider, // 使用 provider 而不是 id
+            model.id, // 使用 id 而不是 provider，支持同一 provider 多个模型 (Issue #87)
             {
               enabled: model.enabled,
               api_key: model.apiKey || '',

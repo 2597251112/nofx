@@ -61,7 +61,7 @@ export const translations = {
     success: 'Success',
     failed: 'Failed',
     inputPrompt: 'Input Prompt',
-    aiThinking: 'AI Chain of Thought',
+    aiThinking: '💭 AI Chain of Thought',
     collapse: 'Collapse',
     expand: 'Expand',
     newStopLoss: 'New Stop Loss',
@@ -351,6 +351,9 @@ export const translations = {
     save: 'Save',
 
     // AI Model Configuration
+    modelNameOptional: 'Model Name (Optional)',
+    modelNamePlaceholder: 'e.g., deepseek-chat, qwen3-max, gpt-5.1',
+    modelNameHelp: 'Leave blank to use default. Defaults: openai → gpt-5.1, gemini → gemini-2.5-pro, grok → grok-4. Other options: gpt-5.1-chat-latest, gemini-3-pro-preview, grok-4-1-fast-reasoning',
     officialAPI: 'Official API',
     customAPI: 'Custom API',
     apiKey: 'API Key',
@@ -926,7 +929,7 @@ export const translations = {
     // AI & Model Questions
     faqWhichModels: 'Which AI models are supported?',
     faqWhichModelsAnswer:
-      'DeepSeek (recommended for cost/performance), Qwen (Alibaba Cloud), and Custom OpenAI-compatible APIs (can be used for OpenAI, Claude via proxy, or other providers).',
+      'DeepSeek (recommended for cost/performance), Qwen (Alibaba Cloud), and Custom OpenAI-compatible APIs. Supported models include:\n\n• **OpenAI**: gpt-5.1, gpt-5.1-chat-latest\n• **Gemini**: gemini-2.5-pro, gemini-3-pro-preview, gemini-2.5-flash\n• **Grok (xAI)**: grok-4, grok-4-1-fast-reasoning',
 
     faqApiCosts: 'How much do API calls cost?',
     faqApiCostsAnswer:
@@ -1371,6 +1374,9 @@ export const translations = {
     save: '保存',
 
     // AI Model Configuration
+    modelNameOptional: '模型名称 (可选)',
+    modelNamePlaceholder: '例如: deepseek-chat, qwen3-max, gpt-5.1',
+    modelNameHelp: '留空使用默认。默认模型：openai → gpt-5.1, gemini → gemini-2.5-pro, grok → grok-4。其他可选：gpt-5.1-chat-latest, gemini-3-pro-preview, grok-4-1-fast-reasoning',
     officialAPI: '官方API',
     customAPI: '自定义API',
     apiKey: 'API密钥',
@@ -1896,7 +1902,7 @@ export const translations = {
     // AI & Model Questions
     faqWhichModels: '支持哪些 AI 模型？',
     faqWhichModelsAnswer:
-      'DeepSeek（推荐性价比）、Qwen（阿里云通义千问）、自定义 OpenAI 兼容 API（可用于 OpenAI、通过代理的 Claude 或其他提供商）。',
+      'DeepSeek（推荐性价比）、Qwen（阿里云通义千问）、自定义 OpenAI 兼容 API。支持的模型包括：\n\n• **OpenAI**: gpt-5.1, gpt-5.1-chat-latest\n• **Gemini**: gemini-2.5-pro, gemini-3-pro-preview, gemini-2.5-flash\n• **Grok (xAI)**: grok-4, grok-4-1-fast-reasoning',
 
     faqApiCosts: 'API 调用成本是多少？',
     faqApiCostsAnswer:

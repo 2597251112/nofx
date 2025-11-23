@@ -218,13 +218,13 @@ export function ModelConfigModal({
                     className="block text-sm font-semibold mb-2"
                     style={{ color: '#EAECEF' }}
                   >
-                    Model Name (可选)
+                    {t('modelNameOptional', language)}
                   </label>
                   <input
                     type="text"
                     value={modelName}
                     onChange={(e) => setModelName(e.target.value)}
-                    placeholder="例如: deepseek-chat, qwen3-max, gpt-5"
+                    placeholder={t('modelNamePlaceholder', language)}
                     className="w-full px-3 py-2 rounded"
                     style={{
                       background: '#0B0E11',
@@ -233,7 +233,7 @@ export function ModelConfigModal({
                     }}
                   />
                   <div className="text-xs mt-1" style={{ color: '#848E9C' }}>
-                    留空使用默认模型名称
+                    {t('modelNameHelp', language)}
                   </div>
                 </div>
 

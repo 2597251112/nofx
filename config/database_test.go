@@ -905,47 +905,54 @@ func TestUpdateAIModel_EmptyAPIKeyShouldNotOverwrite(t *testing.T) {
 	// 1. 创建初始 AI 模型（带 Key）
 	initialKey := "sk-deepseek-key-123"
 	modelID := "deepseek-model"
-	expectedID := userID + "_" + modelID
+	// expectedID := userID + "_" + modelID // 旧逻辑：确定性 ID
+	// 新逻辑：动态 ID，不能预知
 
 	err := db.UpdateAIModel(userID, modelID, true, initialKey, "", "")
 	if err != nil {
 		t.Fatalf("初始化 AI 模型失败: %v", err)
 	}
 
-	// 2. 验证初始 Key 已保存
+	// 2. 验证初始 Key 已保存，并获取实际生成的 ID
 	models, err := db.GetAIModels(userID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
+	
+	var targetModel *AIModelConfig
 	for _, m := range models {
-		if m.ID == expectedID {
-			found = true
-			if m.APIKey != initialKey {
-				t.Errorf("初始 Key 保存失败。期望 %s, 实际 %s", initialKey, m.APIKey)
-			}
+		// 通过 API Key 识别我们刚创建的模型
+		if m.APIKey == initialKey {
+			targetModel = m
+			break
 		}
 	}
-	if !found {
-		t.Fatalf("模型未找到, 期望 ID: %s", expectedID)
+	
+	if targetModel == nil {
+		t.Fatalf("模型未找到, 初始 Key 匹配失败")
 	}
+	
+	realID := targetModel.ID
+	t.Logf("Created model ID: %s", realID)
 
 	// 3. 用空 Key 更新（模拟前端全量保存时的行为）
 	// 目标：只更新 enabled 状态，不更新 Key
-	// 注意：必须使用已生成的 expectedID 进行更新，否则可能会创建新记录
-	err = db.UpdateAIModel(userID, expectedID, false, "", "https://custom.url", "")
+	// 注意：必须使用已生成的 realID 进行更新，否则可能会创建新记录
+	err = db.UpdateAIModel(userID, realID, false, "", "https://custom.url", "")
 	if err != nil {
 		t.Fatalf("更新 AI 模型失败: %v", err)
 	}
 
 	// 4. 验证 Key 是否被覆盖
-	models, err = db.GetAIModels(userID)
+	updatedModels, err := db.GetAIModels(userID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	for _, m := range models {
-		if m.ID == expectedID {
+	found := false
+	for _, m := range updatedModels {
+		if m.ID == realID {
+			found = true
 			if m.APIKey != initialKey {
 				t.Errorf("❌ Bug 确认：AI 模型 API Key 被空值覆盖了！期望 %s，实际为空", initialKey)
 			}
@@ -956,6 +963,9 @@ func TestUpdateAIModel_EmptyAPIKeyShouldNotOverwrite(t *testing.T) {
 				t.Error("Enabled 状态应该正常更新")
 			}
 		}
+	}
+	if !found {
+		t.Fatal("更新后找不到模型")
 	}
 }
 
@@ -973,7 +983,7 @@ func TestDefaultAIModels(t *testing.T) {
 	}
 
 	// 期望的模型列表
-	expectedModels := []string{"deepseek", "qwen", "openai", "gemini", "groq"}
+	expectedModels := []string{"deepseek", "qwen", "openai", "gpt-5.1", "gemini", "gemini-2.5-pro", "gemini-3-pro-preview", "grok"}
 
 	// 验证所有期望的模型都存在
 	foundModels := make(map[string]bool)
@@ -986,6 +996,11 @@ func TestDefaultAIModels(t *testing.T) {
 		if !foundModels[modelID] {
 			t.Errorf("期望的模型 %s 未找到", modelID)
 		}
+	}
+
+	// 验证 groq 不存在
+	if foundModels["groq"] {
+		t.Error("Groq 模型不应该存在（已移除）")
 	}
 
 	// 验证 anthropic 不存在
