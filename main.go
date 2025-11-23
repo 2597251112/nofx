@@ -18,8 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-
-	"github.com/joho/godotenv"
 )
 
 // ConfigFile 配置文件结构，只包含需要同步到数据库的字段
@@ -204,10 +202,6 @@ func main() {
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
 	fmt.Println()
 
-	// Load environment variables from .env file if present (for local/dev runs)
-	// In Docker Compose, variables are injected by the runtime and this is harmless.
-	_ = godotenv.Load()
-
 	// 初始化数据库配置
 	dbPath := "config.db"
 	if len(os.Args) > 1 {
@@ -390,26 +384,14 @@ func main() {
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Println()
 
-	// 获取API服务器端口（优先级：环境变量 > 数据库配置 > 默认值）
-	apiPort := 8080 // 默认端口
-
-	// 1. 优先从环境变量 NOFX_BACKEND_PORT 读取
-	if envPort := strings.TrimSpace(os.Getenv("NOFX_BACKEND_PORT")); envPort != "" {
-		if port, err := strconv.Atoi(envPort); err == nil && port > 0 {
-			apiPort = port
-			log.Printf("🔌 使用环境变量端口: %d (NOFX_BACKEND_PORT)", apiPort)
-		} else {
-			log.Printf("⚠️  环境变量 NOFX_BACKEND_PORT 无效: %s", envPort)
-		}
-	} else if apiPortStr != "" {
-		// 2. 从数据库配置读取（config.json 同步过来的）
+	// 获取API服务器端口（从 config.json 读取，默认 3000）
+	apiPort := 3000
+	if apiPortStr != "" {   
 		if port, err := strconv.Atoi(apiPortStr); err == nil && port > 0 {
 			apiPort = port
-			log.Printf("🔌 使用数据库配置端口: %d (api_server_port)", apiPort)
 		}
-	} else {
-		log.Printf("🔌 使用默认端口: %d", apiPort)
 	}
+	log.Printf("🔌 API服务器端口: %d", apiPort)
 
 	// 创建并启动API服务器
 	apiServer := api.NewServer(traderManager, database, cryptoService, backtestManager, apiPort, configFile.CorsAllowedOrigins)

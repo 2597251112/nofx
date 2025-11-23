@@ -120,7 +120,7 @@ openssl rand -base64 64
 # 6. 运行（prompts/ 目录已包含默认提示词）
 ./nofx
 
-# 7. 访问 http://localhost:8080
+# 7. 访问 http://localhost:3000
 ```
 
 ### Windows 部署 (Windows Deployment)
@@ -154,7 +154,7 @@ docker compose up -d
     "http://localhost:3000",
     "https://your-domain.com"
   ],
-  "api_server_port": 8080
+  "api_server_port": 3000
 }
 ```
 

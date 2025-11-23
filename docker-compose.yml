@@ -13,8 +13,9 @@ services:
     container_name: nofx-trading
     restart: unless-stopped
     stop_grace_period: 30s  # 允许应用有 30 秒时间优雅关闭
-    ports:
-      - "${NOFX_BACKEND_PORT:-8080}:8080"
+    # 后端不需要映射端口，nginx 通过内部网络访问 3000
+    # ports:
+    #   - "${NOFX_BACKEND_PORT:-8080}:3000"
     volumes:
       - ./config.json:/app/config.json:ro  # 基础配置文件（杠杆、风控参数等，只读）
       - ./config.db:/app/config.db  # 🔥 核心资产：系统配置数据库（交易员配置、API密钥、用户数据等）
@@ -33,7 +34,7 @@ services:
     networks:
       - nofx-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3

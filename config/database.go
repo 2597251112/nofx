@@ -517,7 +517,7 @@ func (d *Database) initDefaultData() error {
 	// 初始化系统配置 - 创建所有字段，设置默认值，后续由config.json同步更新
 	systemConfigs := map[string]string{
 		"beta_mode":            "false",                                                                               // 默认关闭内测模式
-		"api_server_port":      "8080",                                                                                // 默认API端口
+		"api_server_port":      "3000",                                                                                // 默认API端口
 		"use_default_coins":    "true",                                                                                // 默认使用内置币种列表
 		"default_coins":        `["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT","HYPEUSDT"]`, // 默认币种列表（JSON格式）
 		"max_daily_loss":       "10.0",                                                                                // 最大日损失百分比
