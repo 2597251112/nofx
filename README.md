@@ -84,6 +84,98 @@ These fixes have been submitted to the official repository, some are still pendi
 
 ---
 
+## 🔐 安全加固 (Security Hardening)
+
+本 fork 相比原项目增加了以下安全加固措施：
+
+| 功能 | 说明 |
+|------|------|
+| **CORS 白名单** | 从 `*` 全放开改为配置化白名单，防止跨域滥用 |
+| **JWT 密钥校验** | 启动时校验 JWT 密钥安全性，拒绝默认/空/短密钥 |
+| **静态文件隔离** | 敏感文件（config.json、.env、config.db）不可通过 HTTP 访问 |
+| **前端嵌入** | web/dist 编译进二进制，简化部署，减少文件泄露风险 |
+
+**Security enhancements in this fork:**
+
+| Feature | Description |
+|---------|-------------|
+| **CORS Whitelist** | Changed from `*` to configurable whitelist |
+| **JWT Validation** | Rejects default/empty/short secrets at startup |
+| **Static File Isolation** | Sensitive files cannot be accessed via HTTP |
+| **Embedded Frontend** | web/dist compiled into binary for simpler deployment |
+
+---
+
+## 🚀 编译运行 (Build & Run)
+
+### 前置要求 (Prerequisites)
+
+- Go 1.21+
+- Node.js 18+ (用于编译前端)
+
+### 编译步骤 (Build Steps)
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/nofxai/nofx.git
+cd nofx
+
+# 2. 编译前端（会嵌入到二进制中）
+cd web && npm install && npm run build && cd ..
+
+# 3. 编译后端
+go build -o nofx .
+
+# 4. 准备配置文件
+cp config.json.example config.json
+# 编辑 config.json，修改 jwt_secret 为安全的随机字符串
+# 生成安全密钥: openssl rand -base64 64
+
+# 5. 准备提示词目录
+mkdir -p prompts
+# 复制或创建提示词文件（如 default.txt）
+
+# 6. 运行
+./nofx
+```
+
+### Windows 部署 (Windows Deployment)
+
+编译后只需以下文件即可运行：
+
+```
+nofx.exe           # 可执行文件（已内置前端）
+config.json        # 配置文件（必须）
+prompts/           # 提示词目录（必须）
+  └── default.txt  # 默认提示词
+secrets/           # 首次运行自动生成
+decision_logs/     # 运行时自动创建
+config.db          # 运行时自动创建
+```
+
+### Docker 部署 (Docker Deployment)
+
+```bash
+docker compose up -d
+```
+
+### 配置说明 (Configuration)
+
+`config.json` 关键配置项：
+
+```json
+{
+  "jwt_secret": "your-secure-random-secret-at-least-32-chars",
+  "cors_allowed_origins": [
+    "http://localhost:3000",
+    "https://your-domain.com"
+  ],
+  "api_server_port": 8080
+}
+```
+
+---
+
 ## 📚 Documentation
 
 - **[Backtest Guide](./docs/BACKTEST_GUIDE.md)** - Complete guide to using the backtesting feature
