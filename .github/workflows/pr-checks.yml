@@ -210,6 +210,9 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
+      - name: Create dummy frontend dist for embed
+        run: mkdir -p web/dist && touch web/dist/.keep
+
       - name: Build
         run: go build -v -o nofx
 

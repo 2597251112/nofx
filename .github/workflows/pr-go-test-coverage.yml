@@ -54,6 +54,9 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Create dummy frontend dist for embed
+        run: mkdir -p web/dist && touch web/dist/.keep
+
       - name: Verify Go coverage tool
         run: |
           go tool cover -h || echo "Warning: go tool cover not available"
