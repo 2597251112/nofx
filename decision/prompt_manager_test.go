@@ -283,3 +283,64 @@ func TestReloadPromptTemplates_GlobalFunction(t *testing.T) {
 		t.Errorf("模板内容不正确: got %s, want '测试内容'", template.Content)
 	}
 }
+
+func TestGetPromptsDir(t *testing.T) {
+	// 保存环境变量和当前工作目录
+	originalEnv := os.Getenv("PROMPTS_DIR")
+	originalWd, _ := os.Getwd()
+	defer func() {
+		os.Setenv("PROMPTS_DIR", originalEnv)
+		os.Chdir(originalWd)
+	}()
+
+	// 创建临时目录模拟工作环境
+	tempDir := t.TempDir()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("无法切换到临时目录: %v", err)
+	}
+
+	t.Run("优先使用环境变量", func(t *testing.T) {
+		expected := "/custom/path"
+		os.Setenv("PROMPTS_DIR", expected)
+		
+		if got := getPromptsDir(); got != expected {
+			t.Errorf("getPromptsDir() = %v, want %v", got, expected)
+		}
+	})
+
+	t.Run("环境变量未设置时使用相对路径(如果存在)", func(t *testing.T) {
+		os.Unsetenv("PROMPTS_DIR")
+		
+		// 创建 ./prompts 目录
+		localPrompts := filepath.Join(tempDir, "prompts")
+		if err := os.Mkdir(localPrompts, 0755); err != nil {
+			t.Fatalf("创建本地 prompts 目录失败: %v", err)
+		}
+
+		// 这里的相对路径解析可能因 OS 而异，我们期望它指向当前目录下的 prompts
+		// getPromptsDir 应该返回 "prompts" 或者绝对路径
+		got := getPromptsDir()
+		if got != "prompts" && got != "./prompts" && got != localPrompts {
+			// 如果返回绝对路径，比较是否相等
+			absGot, _ := filepath.Abs(got)
+			absExpected, _ := filepath.Abs("prompts")
+			if absGot != absExpected {
+				t.Errorf("getPromptsDir() = %v, want ./prompts (or absolute)", got)
+			}
+		}
+		
+		// 清理
+		os.Remove(localPrompts)
+	})
+
+	t.Run("都不存在时回退到 Docker 默认路径", func(t *testing.T) {
+		os.Unsetenv("PROMPTS_DIR")
+		// 确保 ./prompts 不存在
+		os.Remove("prompts")
+
+		expected := "/app/prompts"
+		if got := getPromptsDir(); got != expected {
+			t.Errorf("getPromptsDir() = %v, want %v", got, expected)
+		}
+	})
+}
