@@ -86,23 +86,7 @@ These fixes have been submitted to the official repository, some are still pendi
 
 ## 🔐 安全加固 (Security Hardening)
 
-本 fork 相比原项目增加了以下安全加固措施：
-
-| 功能 | 说明 |
-|------|------|
-| **CORS 白名单** | 从 `*` 全放开改为配置化白名单，防止跨域滥用 |
-| **JWT 密钥校验** | 启动时校验 JWT 密钥安全性，拒绝默认/空/短密钥 |
-| **静态文件隔离** | 敏感文件（config.json、.env、config.db）不可通过 HTTP 访问 |
-| **前端嵌入** | web/dist 编译进二进制，简化部署，减少文件泄露风险 |
-
-**Security enhancements in this fork:**
-
-| Feature | Description |
-|---------|-------------|
-| **CORS Whitelist** | Changed from `*` to configurable whitelist |
-| **JWT Validation** | Rejects default/empty/short secrets at startup |
-| **Static File Isolation** | Sensitive files cannot be accessed via HTTP |
-| **Embedded Frontend** | web/dist compiled into binary for simpler deployment |
+- CORS 白名单、JWT 密钥校验、静态文件隔离、前端嵌入二进制
 
 ---
 
