@@ -1,4 +1,5 @@
 import React from 'react'
+import { Link2 } from 'lucide-react'
 
 /**
  * Helper function to generate exchange URLs
@@ -63,12 +64,13 @@ export const ExchangeLink: React.FC<ExchangeLinkProps> = ({
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className={`hover:text-blue-400 hover:underline transition-colors ${className}`}
+      className={`inline-flex items-center hover:text-blue-400 hover:underline transition-colors ${className}`}
       title={`Trade ${symbol} on ${exchangeId}`}
       onClick={(e) => e.stopPropagation()} // Prevent triggering row clicks in tables
       {...props}
     >
       {content}
+      <Link2 size={14} className="ml-1" />
     </a>
   )
 }

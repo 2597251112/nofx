@@ -525,17 +525,18 @@ func (tm *TraderManager) GetComparisonData() (map[string]interface{}, error) {
 		status := t.GetStatus()
 
 		traders = append(traders, map[string]interface{}{
-			"trader_id":       t.GetID(),
-			"trader_name":     t.GetName(),
-			"ai_model":        t.GetAIModel(),
-			"exchange":        t.GetExchange(),
-			"total_equity":    account["total_equity"],
-			"total_pnl":       account["total_pnl"],
-			"total_pnl_pct":   account["total_pnl_pct"],
-			"position_count":  account["position_count"],
-			"margin_used_pct": account["margin_used_pct"],
-			"call_count":      status["call_count"],
-			"is_running":      status["is_running"],
+			"trader_id":        t.GetID(),
+			"trader_name":      t.GetName(),
+			"ai_model":         t.GetAIModel(),
+			"exchange":         t.GetExchange(),
+			"total_equity":     account["total_equity"],
+			"total_pnl":        account["total_pnl"],
+			"total_pnl_pct":    account["total_pnl_pct"],
+			"position_count":   account["position_count"],
+			"margin_used_pct":  account["margin_used_pct"],
+			"call_count":       status["call_count"],
+			"is_running":       status["is_running"],
+			"trading_symbols":  strings.Join(t.GetTradingCoins(), ","),
 		})
 	}
 
@@ -646,51 +647,54 @@ func (tm *TraderManager) getConcurrentTraderData(traders []*trader.AutoTrader) [
 			case account := <-accountChan:
 				// 成功获取账户信息
 				traderData = map[string]interface{}{
-					"trader_id":       trader.GetID(),
-					"trader_name":     trader.GetName(),
-					"ai_model":        trader.GetAIModel(),
-					"exchange":        trader.GetExchange(),
-					"total_equity":    account["total_equity"],
-					"total_pnl":       account["total_pnl"],
-					"total_pnl_pct":   account["total_pnl_pct"],
-					"position_count":  account["position_count"],
-					"margin_used_pct": account["margin_used_pct"],
-					"is_running":      status["is_running"],
+					"trader_id":              trader.GetID(),
+					"trader_name":            trader.GetName(),
+					"ai_model":               trader.GetAIModel(),
+					"exchange":               trader.GetExchange(),
+					"total_equity":           account["total_equity"],
+					"total_pnl":              account["total_pnl"],
+					"total_pnl_pct":          account["total_pnl_pct"],
+					"position_count":         account["position_count"],
+					"margin_used_pct":        account["margin_used_pct"],
+					"is_running":             status["is_running"],
 					"system_prompt_template": trader.GetSystemPromptTemplate(),
+					"trading_symbols":        strings.Join(trader.GetTradingCoins(), ","),
 				}
 			case err := <-errorChan:
 				// 获取账户信息失败
 				log.Printf("⚠️ 获取交易员 %s 账户信息失败: %v", trader.GetID(), err)
 				traderData = map[string]interface{}{
-					"trader_id":       trader.GetID(),
-					"trader_name":     trader.GetName(),
-					"ai_model":        trader.GetAIModel(),
-					"exchange":        trader.GetExchange(),
-					"total_equity":    0.0,
-					"total_pnl":       0.0,
-					"total_pnl_pct":   0.0,
-					"position_count":  0,
-					"margin_used_pct": 0.0,
-					"is_running":      status["is_running"],
+					"trader_id":              trader.GetID(),
+					"trader_name":            trader.GetName(),
+					"ai_model":               trader.GetAIModel(),
+					"exchange":               trader.GetExchange(),
+					"total_equity":           0.0,
+					"total_pnl":              0.0,
+					"total_pnl_pct":          0.0,
+					"position_count":         0,
+					"margin_used_pct":        0.0,
+					"is_running":             status["is_running"],
 					"system_prompt_template": trader.GetSystemPromptTemplate(),
-					"error":           "账户数据获取失败",
+					"trading_symbols":        strings.Join(trader.GetTradingCoins(), ","),
+					"error":                  "账户数据获取失败",
 				}
 			case <-ctx.Done():
 				// 超时
 				log.Printf("⏰ 获取交易员 %s 账户信息超时", trader.GetID())
 				traderData = map[string]interface{}{
-					"trader_id":       trader.GetID(),
-					"trader_name":     trader.GetName(),
-					"ai_model":        trader.GetAIModel(),
-					"exchange":        trader.GetExchange(),
-					"total_equity":    0.0,
-					"total_pnl":       0.0,
-					"total_pnl_pct":   0.0,
-					"position_count":  0,
-					"margin_used_pct": 0.0,
-					"is_running":      status["is_running"],
+					"trader_id":              trader.GetID(),
+					"trader_name":            trader.GetName(),
+					"ai_model":               trader.GetAIModel(),
+					"exchange":               trader.GetExchange(),
+					"total_equity":           0.0,
+					"total_pnl":              0.0,
+					"total_pnl_pct":          0.0,
+					"position_count":         0,
+					"margin_used_pct":        0.0,
+					"is_running":             status["is_running"],
 					"system_prompt_template": trader.GetSystemPromptTemplate(),
-					"error":           "获取超时",
+					"trading_symbols":        strings.Join(trader.GetTradingCoins(), ","),
+					"error":                  "获取超时",
 				}
 			}
 

@@ -1529,6 +1529,11 @@ func (at *AutoTrader) GetSystemPromptTemplate() string {
 	return at.systemPromptTemplate
 }
 
+// GetTradingCoins 获取交易币种列表
+func (at *AutoTrader) GetTradingCoins() []string {
+	return at.tradingCoins
+}
+
 // GetDecisionLogger 获取决策日志记录器
 func (at *AutoTrader) GetDecisionLogger() logger.IDecisionLogger {
 	return at.decisionLogger
