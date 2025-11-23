@@ -289,13 +289,22 @@ func (at *AutoTrader) Run() error {
 	// 启动回撤监控
 	at.startDrawdownMonitor()
 
+	// 首次执行：等待到下一个整点时间（对齐到扫描间隔的倍数）
+	waitDuration := at.timeUntilNextAlignedInterval()
+	log.Printf("⏳ 等待 %v 后开始首次扫描（对齐到整点时间）", waitDuration.Round(time.Second))
+
+	select {
+	case <-time.After(waitDuration):
+		if err := at.runCycle(); err != nil {
+			log.Printf("❌ 执行失败: %v", err)
+		}
+	case <-at.stopMonitorCh:
+		log.Printf("[%s] ⏹ 收到停止信号，退出自动交易主循环", at.name)
+		return nil
+	}
+
 	ticker := time.NewTicker(at.config.ScanInterval)
 	defer ticker.Stop()
-
-	// 首次立即执行
-	if err := at.runCycle(); err != nil {
-		log.Printf("❌ 执行失败: %v", err)
-	}
 
 	for at.IsRunning() {
 		select {
@@ -310,6 +319,32 @@ func (at *AutoTrader) Run() error {
 	}
 
 	return nil
+}
+
+// timeUntilNextAlignedInterval 计算到下一个对齐时间点的等待时长
+// 例如扫描间隔为5分钟，当前时间为 00:17:35，则返回到 00:20:00 的等待时长
+func (at *AutoTrader) timeUntilNextAlignedInterval() time.Duration {
+	now := time.Now()
+	intervalMinutes := int(at.config.ScanInterval.Minutes())
+	if intervalMinutes <= 0 {
+		intervalMinutes = 1
+	}
+
+	// 计算当前时间的分钟数
+	currentMinute := now.Minute()
+	// 计算下一个对齐的分钟数
+	nextAlignedMinute := ((currentMinute / intervalMinutes) + 1) * intervalMinutes
+
+	// 构建下一个对齐时间点
+	nextTime := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location())
+	nextTime = nextTime.Add(time.Duration(nextAlignedMinute) * time.Minute)
+
+	// 如果超过60分钟，需要进位到下一个小时
+	if nextAlignedMinute >= 60 {
+		nextTime = time.Date(now.Year(), now.Month(), now.Day(), now.Hour()+1, nextAlignedMinute-60, 0, 0, now.Location())
+	}
+
+	return nextTime.Sub(now)
 }
 
 // Stop 停止自动交易

@@ -1735,3 +1735,72 @@ func (s *AutoTraderTestSuite) TestUpdateTakeProfitSkipDuplicate() {
 			"重复止盈更新时不应该调用SetTakeProfit")
 	})
 }
+
+// TestTimeUntilNextAlignedInterval 测试时间对齐计算逻辑
+func (s *AutoTraderTestSuite) TestTimeUntilNextAlignedInterval() {
+	tests := []struct {
+		name             string
+		currentTime      time.Time
+		intervalMinutes  int
+		expectedNextTime time.Time
+	}{
+		{
+			name:             "5分钟间隔_17分35秒_应对齐到20分",
+			currentTime:      time.Date(2024, 11, 24, 0, 17, 35, 0, time.Local),
+			intervalMinutes:  5,
+			expectedNextTime: time.Date(2024, 11, 24, 0, 20, 0, 0, time.Local),
+		},
+		{
+			name:             "5分钟间隔_00分01秒_应对齐到05分",
+			currentTime:      time.Date(2024, 11, 24, 0, 0, 1, 0, time.Local),
+			intervalMinutes:  5,
+			expectedNextTime: time.Date(2024, 11, 24, 0, 5, 0, 0, time.Local),
+		},
+		{
+			name:             "5分钟间隔_59分30秒_应对齐到下一小时00分",
+			currentTime:      time.Date(2024, 11, 24, 0, 59, 30, 0, time.Local),
+			intervalMinutes:  5,
+			expectedNextTime: time.Date(2024, 11, 24, 1, 0, 0, 0, time.Local),
+		},
+		{
+			name:             "3分钟间隔_17分00秒_应对齐到18分",
+			currentTime:      time.Date(2024, 11, 24, 0, 17, 0, 0, time.Local),
+			intervalMinutes:  3,
+			expectedNextTime: time.Date(2024, 11, 24, 0, 18, 0, 0, time.Local),
+		},
+		{
+			name:             "10分钟间隔_25分00秒_应对齐到30分",
+			currentTime:      time.Date(2024, 11, 24, 0, 25, 0, 0, time.Local),
+			intervalMinutes:  10,
+			expectedNextTime: time.Date(2024, 11, 24, 0, 30, 0, 0, time.Local),
+		},
+		{
+			name:             "5分钟间隔_55分30秒_应对齐到下一小时00分",
+			currentTime:      time.Date(2024, 11, 24, 23, 55, 30, 0, time.Local),
+			intervalMinutes:  5,
+			expectedNextTime: time.Date(2024, 11, 24, 24, 0, 0, 0, time.Local), // Go会自动处理为次日00:00
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			// 设置 ScanInterval
+			s.autoTrader.config.ScanInterval = time.Duration(tt.intervalMinutes) * time.Minute
+
+			// Mock time.Now
+			s.patches.ApplyFunc(time.Now, func() time.Time {
+				return tt.currentTime
+			})
+
+			// 调用被测函数
+			waitDuration := s.autoTrader.timeUntilNextAlignedInterval()
+			actualNextTime := tt.currentTime.Add(waitDuration)
+
+			// 验证
+			s.Equal(tt.expectedNextTime.Unix(), actualNextTime.Unix(),
+				"当前时间 %v，间隔 %d 分钟，期望对齐到 %v，实际 %v",
+				tt.currentTime.Format("15:04:05"), tt.intervalMinutes,
+				tt.expectedNextTime.Format("15:04:05"), actualNextTime.Format("15:04:05"))
+		})
+	}
+}
