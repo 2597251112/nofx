@@ -478,8 +478,11 @@ func (d *Database) initDefaultData() error {
 		{"deepseek", "DeepSeek", "deepseek"},
 		{"qwen", "Qwen", "qwen"},
 		{"openai", "OpenAI", "openai"},
+		{"gpt-5.1", "OpenAI GPT-5.1", "openai"},
 		{"gemini", "Google Gemini", "gemini"},
-		{"groq", "Groq", "groq"},
+		{"gemini-2.5-pro", "Gemini 2.5 Pro", "gemini"},
+		{"gemini-3-pro-preview", "Gemini 3.0 Pro", "gemini"},
+		{"grok", "Grok (xAI)", "grok"},
 	}
 
 	for _, model := range aiModels {
@@ -1066,42 +1069,29 @@ func (d *Database) UpdateAIModel(userID, id string, enabled bool, apiKey, custom
 	}
 
 	// ID 不存在，尝试兼容旧逻辑：将 id 作为 provider 查找
-	provider := id
-	err = d.db.QueryRow(`
-		SELECT id FROM ai_models WHERE user_id = ? AND provider = ? LIMIT 1
-	`, userID, provider).Scan(&existingID)
-
-	if err == nil {
-		// 找到了现有配置（通过 provider 匹配，兼容旧版），更新它
-		log.Printf("⚠️  使用旧版 provider 匹配更新模型: %s -> %s", provider, existingID)
-		if apiKey != "" {
-			encryptedAPIKey := d.encryptSensitiveData(apiKey)
-			_, err = d.db.Exec(`
-			UPDATE ai_models SET enabled = ?, api_key = ?, custom_api_url = ?, custom_model_name = ?, updated_at = datetime('now')
-			WHERE id = ? AND user_id = ?
-		`, enabled, encryptedAPIKey, customAPIURL, customModelName, existingID, userID)
-		} else {
-			// apiKey 为空，保留原值，只更新其他字段
-			_, err = d.db.Exec(`
-			UPDATE ai_models SET enabled = ?, custom_api_url = ?, custom_model_name = ?, updated_at = datetime('now')
-			WHERE id = ? AND user_id = ?
-		`, enabled, customAPIURL, customModelName, existingID, userID)
-		}
-		return err
-	}
+	// ❌ 移除旧版 provider 匹配逻辑，因为这会导致无法创建多个相同 provider 的配置 (Issue #87)
+	// provider := id
+	// err = d.db.QueryRow(...)
 
 	// 没有找到任何现有配置，创建新的
 	// 推断 provider（从 id 中提取，或者直接使用 id）
-	if provider == id && (provider == "deepseek" || provider == "qwen") {
-		// id 本身就是 provider
-		provider = id
+	provider := id
+	
+	// 尝试从默认模型中查找 provider (支持 gpt-5.1 等模板 ID)
+	var defaultProvider string
+	err = d.db.QueryRow(`SELECT provider FROM ai_models WHERE id = ? AND user_id = 'default'`, id).Scan(&defaultProvider)
+	if err == nil {
+		provider = defaultProvider
 	} else {
-		// 从 id 中提取 provider（假设格式是 userID_provider 或 timestamp_userID_provider）
-		parts := strings.Split(id, "_")
-		if len(parts) >= 2 {
-			provider = parts[len(parts)-1] // 取最后一部分作为 provider
-		} else {
-			provider = id
+		// 如果不是默认模板，尝试解析 (compatible with old format like userID_provider)
+		if strings.Contains(id, "_") {
+			parts := strings.Split(id, "_")
+			if len(parts) >= 2 {
+				// 简单的启发式：取最后一部分作为 provider，但这可能不准确
+				// 更安全的是：如果 id == provider (e.g. "deepseek"), use it.
+				// 这里保留原有逻辑的意图：尝试解析
+				provider = parts[len(parts)-1]
+			}
 		}
 	}
 
@@ -1112,22 +1102,22 @@ func (d *Database) UpdateAIModel(userID, id string, enabled bool, apiKey, custom
 	`, provider).Scan(&name)
 	if err != nil {
 		// 如果找不到基本信息，使用默认值
-		if provider == "deepseek" {
-			name = "DeepSeek AI"
-		} else if provider == "qwen" {
-			name = "Qwen AI"
-		} else {
-			name = provider + " AI"
-		}
+		name = provider + " AI"
 	}
 
-	// 如果传入的 ID 已经是完整格式（如 "admin_deepseek_custom1"），直接使用
-	// 否则生成新的 ID
-	newModelID := id
-	if id == provider {
-		// id 就是 provider，生成新的用户特定 ID
-		newModelID = fmt.Sprintf("%s_%s", userID, provider)
-	}
+	// 生成新的 ID
+	// 如果传入的 ID 已经是完整格式（如 "admin_deepseek_custom1"），理论上应该在第一步 SELECT id 就匹配到了（如果是更新）
+	// 如果走到这里，说明是要创建新记录。
+	// 为了避免主键冲突，我们需要生成一个唯一的 ID。
+	// 使用时间戳确保唯一性: userID_provider_timestamp
+	newModelID := fmt.Sprintf("%s_%s_%d", userID, provider, time.Now().UnixNano())
+
+	// 特殊情况：如果传入的 id 看起来已经是一个唯一的 ID（不是模板 ID），我们是否应该直接使用它？
+	// 前端创建新模型时通常传模板 ID (如 "openai")。
+	// 如果前端传了一个自定义 ID，我们应该尊重它吗？
+	// 现在的逻辑是：只要查不到 ID，就视为从模板创建。
+	// 为了安全起见，总是生成新 ID 是最稳妥的，除非我们要支持 "Upsert with specific ID"。
+	// 这里的逻辑假设是：前端传 "openai" -> 后端创建 "user_openai_123"
 
 	log.Printf("✓ 创建新的 AI 模型配置: ID=%s, Provider=%s, Name=%s", newModelID, provider, name)
 	encryptedAPIKey := d.encryptSensitiveData(apiKey)

@@ -119,6 +119,37 @@ func TestSetAPIKey_DefaultURLs(t *testing.T) {
 	})
 }
 
+// TestSetAPIKey_DefaultModels tests SetAPIKey uses default models when customModel is empty
+func TestSetAPIKey_DefaultModels(t *testing.T) {
+	// Test all providers in DefaultProviderModels
+	for provider, expectedModel := range DefaultProviderModels {
+		t.Run(provider+"_with_empty_model_uses_default", func(t *testing.T) {
+			client := New().(*Client)
+			client.SetAPIKey("test-api-key", "", "", provider)
+
+			assert.Equal(t, expectedModel, client.Model, "Model should use default for "+provider)
+		})
+
+		t.Run(provider+"_with_custom_model_keeps_custom", func(t *testing.T) {
+			client := New().(*Client)
+			customModel := "custom-model-v1"
+			client.SetAPIKey("test-api-key", "", customModel, provider)
+
+			assert.Equal(t, customModel, client.Model, "Model should keep custom model")
+		})
+	}
+
+	// Test unknown provider
+	t.Run("Unknown_provider_with_empty_model_keeps_default", func(t *testing.T) {
+		client := New().(*Client)
+		// New() sets Model to DefaultDeepSeekModel
+		originalModel := client.Model
+		client.SetAPIKey("test-api-key", "", "", "unknown")
+
+		assert.Equal(t, originalModel, client.Model, "Model should remain unchanged for unknown provider")
+	})
+}
+
 // TestDeepSeekClient_SetAPIKey 测试 DeepSeek 客户端的 SetAPIKey 方法
 func TestDeepSeekClient_SetAPIKey(t *testing.T) {
 	t.Run("with_default_URL", func(t *testing.T) {

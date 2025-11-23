@@ -25,7 +25,14 @@ var (
 	DefaultProviderURLs = map[string]string{
 		"openai": "https://api.openai.com/v1",
 		"gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
-		"groq":   "https://api.groq.com/openai/v1",
+		"grok":   "https://api.x.ai/v1",
+	}
+
+	// DefaultProviderModels 各 provider 的默认模型名称
+	DefaultProviderModels = map[string]string{
+		"openai": "gpt-5.1",
+		"gemini": "gemini-2.5-pro",
+		"grok":   "grok-4",
 	}
 )
 
@@ -89,6 +96,8 @@ func (client *Client) SetAPIKey(apiKey, apiURL, customModel, provider string) {
 
 	if customModel != "" {
 		client.Model = customModel
+	} else if defaultModel, ok := DefaultProviderModels[provider]; ok {
+		client.Model = defaultModel
 	}
 	client.Timeout = 120 * time.Second
 }
