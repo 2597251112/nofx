@@ -47,6 +47,11 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+
+# Create dummy frontend assets to satisfy go:embed requirement
+# The actual frontend is served by the nofx-frontend service (Nginx)
+RUN mkdir -p web/dist && touch web/dist/index.html
+
 RUN CGO_ENABLED=1 GOOS=linux \
     CGO_CFLAGS="-D_LARGEFILE64_SOURCE" \
     go build -trimpath -ldflags="-s -w" -o nofx .
