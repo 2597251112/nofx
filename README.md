@@ -94,8 +94,8 @@ These fixes have been submitted to the official repository, some are still pendi
 
 ### 前置要求 (Prerequisites)
 
-- Go 1.21+
-- Node.js 18+ (用于编译前端)
+- [Go 1.21+](https://go.dev/dl/)
+- [Node.js 18+](https://nodejs.org/) (用于编译前端，包含 npm)
 
 ### 一键编译 (One-Click Build)
 
