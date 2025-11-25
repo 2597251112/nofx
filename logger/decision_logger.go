@@ -80,6 +80,10 @@ type DecisionAction struct {
 	Success   bool      `json:"success"`   // 是否成功
 	Error     string    `json:"error"`     // 错误信息
 
+	// 止损止盈参数（开仓时记录，用于重启后恢复）
+	StopLoss   float64 `json:"stop_loss,omitempty"`   // 止损价格（open_long/open_short 时使用）
+	TakeProfit float64 `json:"take_profit,omitempty"` // 止盈价格（open_long/open_short 时使用）
+
 	// 调整参数（用于前端显示）
 	NewStopLoss     float64 `json:"new_stop_loss,omitempty"`     // 新止损价格（update_stop_loss 时使用）
 	NewTakeProfit   float64 `json:"new_take_profit,omitempty"`   // 新止盈价格（update_take_profit 时使用）
@@ -120,13 +124,15 @@ type IDecisionLogger interface {
 
 // OpenPosition 记录开仓信息（用于主动维护缓存）
 type OpenPosition struct {
-	Symbol    string
-	Side      string  // long/short
-	Quantity  float64
+	Symbol     string
+	Side       string  // long/short
+	Quantity   float64
 	EntryPrice float64
-	Leverage  int
-	OpenTime  time.Time
-	Exchange  string
+	Leverage   int
+	OpenTime   time.Time
+	Exchange   string
+	StopLoss   float64 // 止损价格（Issue #102: 重启后恢复）
+	TakeProfit float64 // 止盈价格（Issue #102: 重启后恢复）
 }
 
 // EquityPoint 账户净值记录点
@@ -961,7 +967,7 @@ func (l *DecisionLogger) updateCacheFromDecision(record *DecisionRecord) {
 
 		switch decision.Action {
 		case "open_long", "open_short":
-			// 记录开仓
+			// 记录开仓（包含止损止盈）
 			side := "long"
 			if decision.Action == "open_short" {
 				side = "short"
@@ -976,6 +982,24 @@ func (l *DecisionLogger) updateCacheFromDecision(record *DecisionRecord) {
 				Leverage:   decision.Leverage,
 				OpenTime:   decision.Timestamp,
 				Exchange:   record.Exchange,
+				StopLoss:   decision.StopLoss,   // Issue #102: 记录止损
+				TakeProfit: decision.TakeProfit, // Issue #102: 记录止盈
+			}
+			l.positionMutex.Unlock()
+
+		case "update_stop_loss":
+			// Issue #102: 更新止损价格
+			l.positionMutex.Lock()
+			if pos, exists := l.openPositions[decision.Symbol]; exists {
+				pos.StopLoss = decision.NewStopLoss
+			}
+			l.positionMutex.Unlock()
+
+		case "update_take_profit":
+			// Issue #102: 更新止盈价格
+			l.positionMutex.Lock()
+			if pos, exists := l.openPositions[decision.Symbol]; exists {
+				pos.TakeProfit = decision.NewTakeProfit
 			}
 			l.positionMutex.Unlock()
 
@@ -1050,7 +1074,21 @@ func (l *DecisionLogger) recoverOpenPositions() error {
 						Leverage:   decision.Leverage,
 						OpenTime:   decision.Timestamp,
 						Exchange:   record.Exchange,
+						StopLoss:   decision.StopLoss,   // Issue #102: 恢复止损
+						TakeProfit: decision.TakeProfit, // Issue #102: 恢复止盈
 					},
+				}
+
+			case "update_stop_loss":
+				// Issue #102: 更新止损价格
+				if action, exists := lastAction[decision.Symbol]; exists && action.action == "open" && action.position != nil {
+					action.position.StopLoss = decision.NewStopLoss
+				}
+
+			case "update_take_profit":
+				// Issue #102: 更新止盈价格
+				if action, exists := lastAction[decision.Symbol]; exists && action.action == "open" && action.position != nil {
+					action.position.TakeProfit = decision.NewTakeProfit
 				}
 
 			case "close_long", "close_short", "auto_close_long", "auto_close_short":
@@ -1327,6 +1365,8 @@ func (l *DecisionLogger) GetOpenPosition(symbol string) *OpenPosition {
 			Leverage:   pos.Leverage,
 			OpenTime:   pos.OpenTime,
 			Exchange:   pos.Exchange,
+			StopLoss:   pos.StopLoss,   // Issue #102: 恢复止损价格
+			TakeProfit: pos.TakeProfit, // Issue #102: 恢复止盈价格
 		}
 	}
 	return nil

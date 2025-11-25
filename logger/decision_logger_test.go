@@ -1,6 +1,8 @@
 package logger
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -2468,4 +2470,238 @@ func TestGetOpenPosition(t *testing.T) {
 			t.Errorf("失败的开仓不应该被记录，实际返回 %+v", pos)
 		}
 	})
+}
+
+// TestGetOpenPosition_StopLossTakeProfit 测试止损止盈的记录和恢复
+// Issue #102 扩展: 系统重启后恢复止损止盈价格
+func TestGetOpenPosition_StopLossTakeProfit(t *testing.T) {
+	// 创建临时目录
+	tempDir, err := os.MkdirTemp("", "test_sl_tp_*")
+	if err != nil {
+		t.Fatalf("创建临时目录失败: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	logger := NewDecisionLogger(tempDir)
+
+	t.Run("开仓时记录止损止盈", func(t *testing.T) {
+		openTime := time.Now().Add(-1 * time.Hour)
+
+		record := &DecisionRecord{
+			Timestamp:   openTime,
+			CycleNumber: 1,
+			Exchange:    "hyperliquid",
+			Success:     true,
+			Decisions: []DecisionAction{
+				{
+					Action:     "open_long",
+					Symbol:     "BTCUSDT",
+					Quantity:   0.01,
+					Leverage:   5,
+					Price:      95000.0,
+					StopLoss:   94000.0, // 止损
+					TakeProfit: 98000.0, // 止盈
+					Timestamp:  openTime,
+					Success:    true,
+				},
+			},
+		}
+
+		err := logger.LogDecision(record)
+		if err != nil {
+			t.Fatalf("记录决策失败: %v", err)
+		}
+
+		pos := logger.GetOpenPosition("BTCUSDT")
+		if pos == nil {
+			t.Fatal("期望获取到开仓信息，实际返回 nil")
+		}
+
+		if pos.StopLoss != 94000.0 {
+			t.Errorf("StopLoss: 期望 94000.0, 实际 %.2f", pos.StopLoss)
+		}
+		if pos.TakeProfit != 98000.0 {
+			t.Errorf("TakeProfit: 期望 98000.0, 实际 %.2f", pos.TakeProfit)
+		}
+	})
+
+	t.Run("更新止损后反映新值", func(t *testing.T) {
+		updateTime := time.Now().Add(-30 * time.Minute)
+
+		record := &DecisionRecord{
+			Timestamp:   updateTime,
+			CycleNumber: 2,
+			Exchange:    "hyperliquid",
+			Success:     true,
+			Decisions: []DecisionAction{
+				{
+					Action:      "update_stop_loss",
+					Symbol:      "BTCUSDT",
+					NewStopLoss: 94500.0, // 移动止损到保本位
+					Timestamp:   updateTime,
+					Success:     true,
+				},
+			},
+		}
+
+		err := logger.LogDecision(record)
+		if err != nil {
+			t.Fatalf("记录决策失败: %v", err)
+		}
+
+		pos := logger.GetOpenPosition("BTCUSDT")
+		if pos == nil {
+			t.Fatal("期望获取到开仓信息，实际返回 nil")
+		}
+
+		if pos.StopLoss != 94500.0 {
+			t.Errorf("StopLoss: 期望 94500.0 (更新后), 实际 %.2f", pos.StopLoss)
+		}
+		// 止盈应该保持不变
+		if pos.TakeProfit != 98000.0 {
+			t.Errorf("TakeProfit: 期望 98000.0 (不变), 实际 %.2f", pos.TakeProfit)
+		}
+	})
+
+	t.Run("更新止盈后反映新值", func(t *testing.T) {
+		updateTime := time.Now().Add(-20 * time.Minute)
+
+		record := &DecisionRecord{
+			Timestamp:   updateTime,
+			CycleNumber: 3,
+			Exchange:    "hyperliquid",
+			Success:     true,
+			Decisions: []DecisionAction{
+				{
+					Action:        "update_take_profit",
+					Symbol:        "BTCUSDT",
+					NewTakeProfit: 99000.0, // 扩大止盈目标
+					Timestamp:     updateTime,
+					Success:       true,
+				},
+			},
+		}
+
+		err := logger.LogDecision(record)
+		if err != nil {
+			t.Fatalf("记录决策失败: %v", err)
+		}
+
+		pos := logger.GetOpenPosition("BTCUSDT")
+		if pos == nil {
+			t.Fatal("期望获取到开仓信息，实际返回 nil")
+		}
+
+		// 止损应该保持不变
+		if pos.StopLoss != 94500.0 {
+			t.Errorf("StopLoss: 期望 94500.0 (不变), 实际 %.2f", pos.StopLoss)
+		}
+		if pos.TakeProfit != 99000.0 {
+			t.Errorf("TakeProfit: 期望 99000.0 (更新后), 实际 %.2f", pos.TakeProfit)
+		}
+	})
+}
+
+// TestRecoverOpenPositions_StopLossTakeProfit 测试重启后从历史文件恢复止损止盈
+// Issue #102 扩展: recoverOpenPositions 必须正确处理 update_stop_loss/update_take_profit
+func TestRecoverOpenPositions_StopLossTakeProfit(t *testing.T) {
+	// 创建临时目录
+	tempDir, err := os.MkdirTemp("", "test_recover_sl_tp_*")
+	if err != nil {
+		t.Fatalf("创建临时目录失败: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// 手动写入 JSON 文件模拟历史记录（模拟重启前的数据）
+	// Cycle 1: 开仓，止损 94000，止盈 98000
+	record1 := &DecisionRecord{
+		Timestamp:   time.Now().Add(-2 * time.Hour),
+		CycleNumber: 1,
+		Exchange:    "hyperliquid",
+		Success:     true,
+		Decisions: []DecisionAction{
+			{
+				Action:     "open_long",
+				Symbol:     "BTCUSDT",
+				Quantity:   0.01,
+				Leverage:   5,
+				Price:      95000.0,
+				StopLoss:   94000.0,
+				TakeProfit: 98000.0,
+				Timestamp:  time.Now().Add(-2 * time.Hour),
+				Success:    true,
+			},
+		},
+	}
+
+	// Cycle 2: 更新止损到 94500
+	record2 := &DecisionRecord{
+		Timestamp:   time.Now().Add(-1 * time.Hour),
+		CycleNumber: 2,
+		Exchange:    "hyperliquid",
+		Success:     true,
+		Decisions: []DecisionAction{
+			{
+				Action:      "update_stop_loss",
+				Symbol:      "BTCUSDT",
+				NewStopLoss: 94500.0,
+				Timestamp:   time.Now().Add(-1 * time.Hour),
+				Success:     true,
+			},
+		},
+	}
+
+	// Cycle 3: 更新止盈到 99000
+	record3 := &DecisionRecord{
+		Timestamp:   time.Now().Add(-30 * time.Minute),
+		CycleNumber: 3,
+		Exchange:    "hyperliquid",
+		Success:     true,
+		Decisions: []DecisionAction{
+			{
+				Action:        "update_take_profit",
+				Symbol:        "BTCUSDT",
+				NewTakeProfit: 99000.0,
+				Timestamp:     time.Now().Add(-30 * time.Minute),
+				Success:       true,
+			},
+		},
+	}
+
+	// 写入 JSON 文件
+	for i, record := range []*DecisionRecord{record1, record2, record3} {
+		filename := fmt.Sprintf("decision_%s_cycle%d.json", time.Now().Format("20060102_150405"), i+1)
+		filepath := tempDir + "/" + filename
+		data, _ := json.MarshalIndent(record, "", "  ")
+		if err := os.WriteFile(filepath, data, 0644); err != nil {
+			t.Fatalf("写入文件失败: %v", err)
+		}
+	}
+
+	// 创建新的 logger（模拟重启，会触发 recoverOpenPositions）
+	logger := NewDecisionLogger(tempDir)
+
+	// 验证 GetOpenPosition 返回最新的止损止盈
+	pos := logger.GetOpenPosition("BTCUSDT")
+	if pos == nil {
+		t.Fatal("期望获取到开仓信息，实际返回 nil")
+	}
+
+	// 验证止损是更新后的值（94500），不是开仓时的值（94000）
+	if pos.StopLoss != 94500.0 {
+		t.Errorf("StopLoss: 期望 94500.0 (update_stop_loss 后), 实际 %.2f", pos.StopLoss)
+	}
+
+	// 验证止盈是更新后的值（99000），不是开仓时的值（98000）
+	if pos.TakeProfit != 99000.0 {
+		t.Errorf("TakeProfit: 期望 99000.0 (update_take_profit 后), 实际 %.2f", pos.TakeProfit)
+	}
+
+	// 验证其他字段也正确恢复
+	if pos.Side != "long" {
+		t.Errorf("Side: 期望 long, 实际 %s", pos.Side)
+	}
+	if pos.EntryPrice != 95000.0 {
+		t.Errorf("EntryPrice: 期望 95000.0, 实际 %.2f", pos.EntryPrice)
+	}
 }

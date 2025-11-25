@@ -713,11 +713,19 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 		posKey := symbol + "_" + side
 		currentPositionKeys[posKey] = true
 		if _, exists := at.positionFirstSeenTime[posKey]; !exists {
-			// 尝试从 decision_logs 恢复开仓时间 (Issue #102)
+			// 尝试从 decision_logs 恢复开仓时间和止损止盈 (Issue #102)
 			if openPos := at.decisionLogger.GetOpenPosition(symbol); openPos != nil && openPos.Side == side {
 				at.positionFirstSeenTime[posKey] = openPos.OpenTime.UnixMilli()
-				log.Printf("✓ 从历史记录恢复持仓时间: %s %s, 开仓时间: %s",
-					symbol, side, openPos.OpenTime.Format("2006-01-02 15:04:05"))
+				// 同时恢复止损止盈价格
+				if openPos.StopLoss > 0 {
+					at.positionStopLoss[posKey] = openPos.StopLoss
+				}
+				if openPos.TakeProfit > 0 {
+					at.positionTakeProfit[posKey] = openPos.TakeProfit
+				}
+				log.Printf("✓ 从历史记录恢复持仓: %s %s, 开仓时间: %s, 止损: %.4f, 止盈: %.4f",
+					symbol, side, openPos.OpenTime.Format("2006-01-02 15:04:05"),
+					openPos.StopLoss, openPos.TakeProfit)
 			} else {
 				// 没有历史记录，设置为 0 表示未知
 				at.positionFirstSeenTime[posKey] = 0
@@ -919,11 +927,13 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *decision.Decision, act
 		log.Printf("  ⚠ 设置止损失败: %v", err)
 	} else {
 		at.positionStopLoss[posKey] = decision.StopLoss // 记录止损价格
+		actionRecord.StopLoss = decision.StopLoss      // Issue #102: 记录到日志用于重启恢复
 	}
 	if err := at.trader.SetTakeProfit(decision.Symbol, "LONG", quantity, decision.TakeProfit); err != nil {
 		log.Printf("  ⚠ 设置止盈失败: %v", err)
 	} else {
 		at.positionTakeProfit[posKey] = decision.TakeProfit // 记录止盈价格
+		actionRecord.TakeProfit = decision.TakeProfit      // Issue #102: 记录到日志用于重启恢复
 	}
 
 	// ✅ 验证实际成交价格和风险（基于实际成交数据）
@@ -1012,11 +1022,13 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *decision.Decision, ac
 		log.Printf("  ⚠ 设置止损失败: %v", err)
 	} else {
 		at.positionStopLoss[posKey] = decision.StopLoss // 记录止损价格
+		actionRecord.StopLoss = decision.StopLoss      // Issue #102: 记录到日志用于重启恢复
 	}
 	if err := at.trader.SetTakeProfit(decision.Symbol, "SHORT", quantity, decision.TakeProfit); err != nil {
 		log.Printf("  ⚠ 设置止盈失败: %v", err)
 	} else {
 		at.positionTakeProfit[posKey] = decision.TakeProfit // 记录止盈价格
+		actionRecord.TakeProfit = decision.TakeProfit      // Issue #102: 记录到日志用于重启恢复
 	}
 
 	// ✅ 验证实际成交价格和风险（基于实际成交数据）
