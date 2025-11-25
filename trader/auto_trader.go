@@ -713,8 +713,16 @@ func (at *AutoTrader) buildTradingContext() (*decision.Context, error) {
 		posKey := symbol + "_" + side
 		currentPositionKeys[posKey] = true
 		if _, exists := at.positionFirstSeenTime[posKey]; !exists {
-			// 新持仓，记录当前时间
-			at.positionFirstSeenTime[posKey] = time.Now().UnixMilli()
+			// 尝试从 decision_logs 恢复开仓时间 (Issue #102)
+			if openPos := at.decisionLogger.GetOpenPosition(symbol); openPos != nil && openPos.Side == side {
+				at.positionFirstSeenTime[posKey] = openPos.OpenTime.UnixMilli()
+				log.Printf("✓ 从历史记录恢复持仓时间: %s %s, 开仓时间: %s",
+					symbol, side, openPos.OpenTime.Format("2006-01-02 15:04:05"))
+			} else {
+				// 没有历史记录，设置为 0 表示未知
+				at.positionFirstSeenTime[posKey] = 0
+				log.Printf("⚠️ 未找到持仓历史记录: %s %s, 持仓时间未知", symbol, side)
+			}
 		}
 		updateTime := at.positionFirstSeenTime[posKey]
 

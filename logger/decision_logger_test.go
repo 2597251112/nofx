@@ -2276,3 +2276,196 @@ func TestCacheRecoveryAfterRestart(t *testing.T) {
 		}
 	})
 }
+
+// TestGetOpenPosition 测试获取开仓信息的功能
+// Issue #102: 持仓时间按系统启动时间计算的 bug 修复
+func TestGetOpenPosition(t *testing.T) {
+	// 创建临时目录
+	tempDir, err := os.MkdirTemp("", "test_open_position_*")
+	if err != nil {
+		t.Fatalf("创建临时目录失败: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	logger := NewDecisionLogger(tempDir)
+
+	t.Run("没有开仓记录时返回nil", func(t *testing.T) {
+		pos := logger.GetOpenPosition("BTCUSDT")
+		if pos != nil {
+			t.Errorf("期望返回 nil，实际返回 %+v", pos)
+		}
+	})
+
+	t.Run("记录开仓后能获取到开仓信息", func(t *testing.T) {
+		openTime := time.Now().Add(-2 * time.Hour) // 2小时前开仓
+
+		// 模拟开仓记录
+		record := &DecisionRecord{
+			Timestamp:   openTime,
+			CycleNumber: 1,
+			Exchange:    "hyperliquid",
+			Success:     true,
+			Decisions: []DecisionAction{
+				{
+					Action:    "open_long",
+					Symbol:    "BTCUSDT",
+					Quantity:  0.01,
+					Leverage:  5,
+					Price:     95000.0,
+					Timestamp: openTime,
+					Success:   true,
+				},
+			},
+		}
+
+		err := logger.LogDecision(record)
+		if err != nil {
+			t.Fatalf("记录决策失败: %v", err)
+		}
+
+		// 获取开仓信息
+		pos := logger.GetOpenPosition("BTCUSDT")
+		if pos == nil {
+			t.Fatal("期望获取到开仓信息，实际返回 nil")
+		}
+
+		if pos.Symbol != "BTCUSDT" {
+			t.Errorf("Symbol: 期望 BTCUSDT, 实际 %s", pos.Symbol)
+		}
+		if pos.Side != "long" {
+			t.Errorf("Side: 期望 long, 实际 %s", pos.Side)
+		}
+		if pos.EntryPrice != 95000.0 {
+			t.Errorf("EntryPrice: 期望 95000.0, 实际 %.2f", pos.EntryPrice)
+		}
+		// 验证开仓时间（允许1秒误差）
+		timeDiff := pos.OpenTime.Sub(openTime)
+		if timeDiff < -time.Second || timeDiff > time.Second {
+			t.Errorf("OpenTime: 期望 %v, 实际 %v", openTime, pos.OpenTime)
+		}
+	})
+
+	t.Run("平仓后返回nil", func(t *testing.T) {
+		closeTime := time.Now().Add(-1 * time.Hour) // 1小时前平仓
+
+		// 模拟平仓记录
+		record := &DecisionRecord{
+			Timestamp:   closeTime,
+			CycleNumber: 2,
+			Exchange:    "hyperliquid",
+			Success:     true,
+			Decisions: []DecisionAction{
+				{
+					Action:    "close_long",
+					Symbol:    "BTCUSDT",
+					Quantity:  0.01,
+					Price:     96000.0,
+					Timestamp: closeTime,
+					Success:   true,
+				},
+			},
+		}
+
+		err := logger.LogDecision(record)
+		if err != nil {
+			t.Fatalf("记录决策失败: %v", err)
+		}
+
+		// 平仓后应该返回 nil
+		pos := logger.GetOpenPosition("BTCUSDT")
+		if pos != nil {
+			t.Errorf("平仓后期望返回 nil，实际返回 %+v", pos)
+		}
+	})
+
+	t.Run("重新开仓后返回新的开仓信息", func(t *testing.T) {
+		newOpenTime := time.Now().Add(-30 * time.Minute) // 30分钟前重新开仓
+
+		// 模拟重新开仓
+		record := &DecisionRecord{
+			Timestamp:   newOpenTime,
+			CycleNumber: 3,
+			Exchange:    "hyperliquid",
+			Success:     true,
+			Decisions: []DecisionAction{
+				{
+					Action:    "open_short",
+					Symbol:    "BTCUSDT",
+					Quantity:  0.02,
+					Leverage:  3,
+					Price:     97000.0,
+					Timestamp: newOpenTime,
+					Success:   true,
+				},
+			},
+		}
+
+		err := logger.LogDecision(record)
+		if err != nil {
+			t.Fatalf("记录决策失败: %v", err)
+		}
+
+		pos := logger.GetOpenPosition("BTCUSDT")
+		if pos == nil {
+			t.Fatal("期望获取到新的开仓信息，实际返回 nil")
+		}
+
+		if pos.Side != "short" {
+			t.Errorf("Side: 期望 short, 实际 %s", pos.Side)
+		}
+		if pos.EntryPrice != 97000.0 {
+			t.Errorf("EntryPrice: 期望 97000.0, 实际 %.2f", pos.EntryPrice)
+		}
+	})
+
+	t.Run("失败的开仓不会被记录", func(t *testing.T) {
+		// 先平掉之前的仓位
+		closeRecord := &DecisionRecord{
+			Timestamp:   time.Now().Add(-20 * time.Minute),
+			CycleNumber: 4,
+			Exchange:    "hyperliquid",
+			Success:     true,
+			Decisions: []DecisionAction{
+				{
+					Action:    "close_short",
+					Symbol:    "BTCUSDT",
+					Quantity:  0.02,
+					Price:     96500.0,
+					Timestamp: time.Now().Add(-20 * time.Minute),
+					Success:   true,
+				},
+			},
+		}
+		logger.LogDecision(closeRecord)
+
+		// 模拟失败的开仓
+		failedRecord := &DecisionRecord{
+			Timestamp:   time.Now().Add(-10 * time.Minute),
+			CycleNumber: 5,
+			Exchange:    "hyperliquid",
+			Success:     true, // record 本身成功
+			Decisions: []DecisionAction{
+				{
+					Action:    "open_long",
+					Symbol:    "BTCUSDT",
+					Quantity:  0.01,
+					Leverage:  5,
+					Price:     98000.0,
+					Timestamp: time.Now().Add(-10 * time.Minute),
+					Success:   false, // 但决策执行失败
+				},
+			},
+		}
+
+		err := logger.LogDecision(failedRecord)
+		if err != nil {
+			t.Fatalf("记录决策失败: %v", err)
+		}
+
+		// 失败的开仓不应该被记录
+		pos := logger.GetOpenPosition("BTCUSDT")
+		if pos != nil {
+			t.Errorf("失败的开仓不应该被记录，实际返回 %+v", pos)
+		}
+	})
+}

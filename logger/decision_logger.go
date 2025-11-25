@@ -112,6 +112,10 @@ type IDecisionLogger interface {
 	// tradeLimit: 返回的交易记录数量限制
 	// filterByPrompt: 是否按当前 PromptHash 过滤交易（默认 false 显示所有）
 	GetPerformanceWithCache(tradeLimit int, filterByPrompt bool) (*PerformanceAnalysis, error)
+	// GetOpenPosition 获取指定币种的开仓信息
+	// 返回 nil 表示该币种没有未平仓持仓
+	// Issue #102: 用于在系统重启后恢复持仓的真实开仓时间
+	GetOpenPosition(symbol string) *OpenPosition
 }
 
 // OpenPosition 记录开仓信息（用于主动维护缓存）
@@ -1000,8 +1004,9 @@ func (l *DecisionLogger) updateCacheFromDecision(record *DecisionRecord) {
 // recoverOpenPositions 从历史文件恢复未平仓的持仓
 // 在服务启动时调用,确保重启后能正确追踪之前的开仓
 func (l *DecisionLogger) recoverOpenPositions() error {
-	// 获取最近的决策文件（扫描最近500个周期,足够覆盖大部分场景）
-	records, err := l.GetLatestRecords(500)
+	// 获取最近的决策文件（扫描 InitialScanCycles 个周期，覆盖长时间持仓场景）
+	// Issue #102: 原来只扫描 500 个周期（约 41 小时），超过此时间的持仓无法恢复开仓时间
+	records, err := l.GetLatestRecords(InitialScanCycles)
 	if err != nil {
 		return fmt.Errorf("获取历史记录失败: %w", err)
 	}
@@ -1303,6 +1308,28 @@ func (l *DecisionLogger) GetRecentTrades(limit int) []TradeOutcome {
 	result := make([]TradeOutcome, limit)
 	copy(result, l.tradesCache[:limit])
 	return result
+}
+
+// GetOpenPosition 获取指定币种的开仓信息
+// 返回 nil 表示该币种没有未平仓持仓
+// Issue #102: 用于在系统重启后恢复持仓的真实开仓时间
+func (l *DecisionLogger) GetOpenPosition(symbol string) *OpenPosition {
+	l.positionMutex.RLock()
+	defer l.positionMutex.RUnlock()
+
+	if pos, exists := l.openPositions[symbol]; exists {
+		// 返回副本，避免外部修改
+		return &OpenPosition{
+			Symbol:     pos.Symbol,
+			Side:       pos.Side,
+			Quantity:   pos.Quantity,
+			EntryPrice: pos.EntryPrice,
+			Leverage:   pos.Leverage,
+			OpenTime:   pos.OpenTime,
+			Exchange:   pos.Exchange,
+		}
+	}
+	return nil
 }
 
 // calculateStatisticsFromTrades 基于交易列表计算统计信息
