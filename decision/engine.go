@@ -238,7 +238,8 @@ func fetchMarketDataForContext(ctx *Context) error {
 			// 计算持仓价值（USD）= 持仓量 × 当前价格
 			oiValue := data.OpenInterest.Latest * data.CurrentPrice
 			oiValueInMillions := oiValue / 1_000_000 // 转换为百万美元单位
-			if oiValueInMillions < minOIThresholdMillions {
+			// OI=0 时不过滤（可能是 API 异常），只有 OI > 0 且低于阈值才过滤
+			if data.OpenInterest.Latest > 0 && oiValueInMillions < minOIThresholdMillions {
 				log.Printf("⚠️  %s 持仓价值过低(%.2fM USD < %.1fM)，跳过此币种 [持仓量:%.0f × 价格:%.4f]",
 					symbol, oiValueInMillions, minOIThresholdMillions, data.OpenInterest.Latest, data.CurrentPrice)
 				continue
@@ -431,6 +432,26 @@ func buildSystemPrompt(accountEquity float64, btcEthLeverage, altcoinLeverage in
 	return sb.String()
 }
 
+// getDisplayableCandidates 返回应显示的候选币种（排除已持仓和无市场数据的）
+func getDisplayableCandidates(ctx *Context) []CandidateCoin {
+	positionSymbols := make(map[string]bool)
+	for _, pos := range ctx.Positions {
+		positionSymbols[pos.Symbol] = true
+	}
+
+	var result []CandidateCoin
+	for _, coin := range ctx.CandidateCoins {
+		if _, hasData := ctx.MarketDataMap[coin.Symbol]; !hasData {
+			continue
+		}
+		if positionSymbols[coin.Symbol] {
+			continue
+		}
+		result = append(result, coin)
+	}
+	return result
+}
+
 // buildUserPrompt 构建 User Prompt（动态数据）
 func buildUserPrompt(ctx *Context) string {
 	var sb strings.Builder
@@ -528,29 +549,10 @@ func buildUserPrompt(ctx *Context) string {
 	}
 
 	// 候选币种（完整市场数据）
-	// 只显示未持仓的币种，避免重复
-	sb.WriteString(fmt.Sprintf("## 候选币种 (%d个)\n\n", len(ctx.MarketDataMap)))
-	displayedCount := 0
-	for _, coin := range ctx.CandidateCoins {
-		marketData, hasData := ctx.MarketDataMap[coin.Symbol]
-		if !hasData {
-			continue
-		}
+	displayableCandidates := getDisplayableCandidates(ctx)
+	sb.WriteString(fmt.Sprintf("## 候选币种 (%d个)\n\n", len(displayableCandidates)))
 
-		// 检查是否已经持仓，如果已持仓则跳过（避免重复）
-		isHeldPosition := false
-		for _, pos := range ctx.Positions {
-			if pos.Symbol == coin.Symbol {
-				isHeldPosition = true
-				break
-			}
-		}
-		if isHeldPosition {
-			continue
-		}
-
-		displayedCount++
-
+	for i, coin := range displayableCandidates {
 		sourceTags := ""
 		if len(coin.Sources) > 1 {
 			sourceTags = " (AI500+OI_Top双重信号)"
@@ -560,8 +562,8 @@ func buildUserPrompt(ctx *Context) string {
 
 		// 使用FormatMarketData输出完整市场数据
 		// skipSymbolMention=false 因为这是候选币种列表，需要显示币种名称
-		sb.WriteString(fmt.Sprintf("### %d. %s%s\n\n", displayedCount, coin.Symbol, sourceTags))
-		sb.WriteString(market.Format(marketData, false))
+		sb.WriteString(fmt.Sprintf("### %d. %s%s\n\n", i+1, coin.Symbol, sourceTags))
+		sb.WriteString(market.Format(ctx.MarketDataMap[coin.Symbol], false))
 		sb.WriteString("\n")
 	}
 	sb.WriteString("\n")

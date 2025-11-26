@@ -234,3 +234,114 @@ func TestBuildUserPrompt_MultiplePositions(t *testing.T) {
 		t.Errorf("候选币种应该只有 1 个（BNBUSDT），实际有 %d 个\n候选币种部分:\n%s", candidateCount, candidateSection)
 	}
 }
+
+// TestBuildUserPrompt_CandidateCountInHeader 测试候选币种标题数量应反映实际显示数量
+// Issue: 标题用 len(ctx.MarketDataMap) 包含持仓，导致数字不准确
+func TestBuildUserPrompt_CandidateCountInHeader(t *testing.T) {
+	tests := []struct {
+		name              string
+		candidateCoins    []CandidateCoin
+		positions         []PositionInfo
+		marketDataSymbols []string // 有市场数据的币种
+		expectedCount     int      // 标题中应显示的数量
+	}{
+		{
+			name: "无持仓时显示全部候选",
+			candidateCoins: []CandidateCoin{
+				{Symbol: "BTCUSDT", Sources: []string{"ai500"}},
+				{Symbol: "ETHUSDT", Sources: []string{"ai500"}},
+			},
+			positions:         []PositionInfo{},
+			marketDataSymbols: []string{"BTCUSDT", "ETHUSDT"},
+			expectedCount:     2,
+		},
+		{
+			name: "有持仓时排除已持仓币种",
+			candidateCoins: []CandidateCoin{
+				{Symbol: "BTCUSDT", Sources: []string{"ai500"}},
+				{Symbol: "ETHUSDT", Sources: []string{"ai500"}},
+			},
+			positions: []PositionInfo{
+				{Symbol: "BTCUSDT", Side: "long", Quantity: 0.1},
+			},
+			marketDataSymbols: []string{"BTCUSDT", "ETHUSDT"},
+			expectedCount:     1, // BTCUSDT 已持仓，只显示 ETHUSDT
+		},
+		{
+			name: "无市场数据的候选不计入",
+			candidateCoins: []CandidateCoin{
+				{Symbol: "BTCUSDT", Sources: []string{"ai500"}},
+				{Symbol: "ETHUSDT", Sources: []string{"ai500"}},
+				{Symbol: "SOLUSDT", Sources: []string{"ai500"}},
+			},
+			positions:         []PositionInfo{},
+			marketDataSymbols: []string{"BTCUSDT", "ETHUSDT"}, // SOLUSDT 无数据
+			expectedCount:     2,
+		},
+		{
+			name: "混合情况：持仓+无数据",
+			candidateCoins: []CandidateCoin{
+				{Symbol: "BTCUSDT", Sources: []string{"ai500"}},
+				{Symbol: "ETHUSDT", Sources: []string{"ai500"}},
+				{Symbol: "SOLUSDT", Sources: []string{"ai500"}},
+			},
+			positions: []PositionInfo{
+				{Symbol: "BTCUSDT", Side: "long", Quantity: 0.1},
+			},
+			marketDataSymbols: []string{"BTCUSDT", "ETHUSDT"}, // SOLUSDT 无数据
+			expectedCount:     1, // BTCUSDT 持仓，SOLUSDT 无数据，只有 ETHUSDT
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 构建 Context
+			ctx := &Context{
+				CurrentTime:    "2024-01-01 12:00:00",
+				CandidateCoins: tt.candidateCoins,
+				Positions:      tt.positions,
+				MarketDataMap:  make(map[string]*market.Data),
+			}
+
+			// 填充市场数据
+			for _, symbol := range tt.marketDataSymbols {
+				ctx.MarketDataMap[symbol] = &market.Data{
+					Symbol:       symbol,
+					CurrentPrice: 1000.0,
+				}
+			}
+
+			// 调用 buildUserPrompt
+			prompt := buildUserPrompt(ctx)
+
+			// 检查标题中的数量
+			// 格式: "## 候选币种 (N个)"
+			expectedHeader := "## 候选币种 (" + itoa(tt.expectedCount) + "个)"
+			if !strings.Contains(prompt, expectedHeader) {
+				// 找出实际的标题
+				lines := strings.Split(prompt, "\n")
+				var actualHeader string
+				for _, line := range lines {
+					if strings.HasPrefix(line, "## 候选币种") {
+						actualHeader = line
+						break
+					}
+				}
+				t.Errorf("期望标题 %q, 实际 %q", expectedHeader, actualHeader)
+			}
+		})
+	}
+}
+
+// itoa 简单的整数转字符串
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	result := ""
+	for n > 0 {
+		result = string(rune('0'+n%10)) + result
+		n /= 10
+	}
+	return result
+}
