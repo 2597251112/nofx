@@ -55,7 +55,7 @@ jobs:
         run: go mod download
 
       - name: Create dummy frontend dist for embed
-        run: mkdir -p web/dist && touch web/dist/.keep
+        run: mkdir -p web/dist && touch web/dist/placeholder
 
       - name: Verify Go coverage tool
         run: |
