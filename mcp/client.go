@@ -259,6 +259,16 @@ func (client *Client) callOnce(systemPrompt, userPrompt string) (string, error) 
 		return "", fmt.Errorf("读取响应失败: %w", err)
 	}
 
+	// 🔍 调试：保存完整响应（用于 Issue #103 调试 Gemini 思维链问题）
+	if client.Provider == "gemini" {
+		debugDir := "debug_logs"
+		os.MkdirAll(debugDir, 0755)
+		timestamp := time.Now().Format("20060102_150405")
+		respFile := fmt.Sprintf("%s/%s_response_%s.json", debugDir, client.Provider, timestamp)
+		os.WriteFile(respFile, body, 0644)
+		log.Printf("🔍 [DEBUG] 响应已保存到: %s (长度: %d bytes)", respFile, len(body))
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("API返回错误 (status %d): %s", resp.StatusCode, string(body))
 	}
