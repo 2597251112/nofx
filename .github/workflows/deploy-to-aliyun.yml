@@ -1,0 +1,100 @@
+name: Deploy to Aliyun Server
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.ALIYUN_SSH_PRIVATE_KEY }}
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
+          ALIYUN_DEPLOY_DIR: ${{ secrets.ALIYUN_DEPLOY_DIR }}
+        run: |
+          # 创建 SSH 密钥文件
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # 添加主机到 known_hosts（避免首次连接提示）
+          ssh-keyscan -H "$ALIYUN_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          # 通过 SSH 执行部署脚本
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+              "${ALIYUN_USER}@${ALIYUN_HOST}" << 'DEPLOY_SCRIPT'
+
+            # 设置变量
+            DEPLOY_DIR="${ALIYUN_DEPLOY_DIR:-/opt/nofx}"
+            REPO_URL="https://github.com/2597251112/nofx.git"
+            BRANCH="main"
+
+            # 创建部署目录
+            mkdir -p "$DEPLOY_DIR"
+            cd "$DEPLOY_DIR"
+
+            # 如果目录为空，进行初始化克隆
+            if [ ! -d .git ]; then
+              git clone -b "$BRANCH" "$REPO_URL" .
+            else
+              # 否则更新现有代码
+              git fetch origin
+              git checkout "$BRANCH"
+              git pull origin "$BRANCH"
+            fi
+
+            # 使用 Docker Compose 更新和重启服务
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+
+            echo "✅ Deployment completed successfully!"
+            docker compose -f docker-compose.prod.yml ps
+
+          DEPLOY_SCRIPT
+
+      - name: Verify deployment
+        env:
+          ALIYUN_HOST: ${{ secrets.ALIYUN_HOST }}
+          ALIYUN_USER: ${{ secrets.ALIYUN_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ALIYUN_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          
+          # 检查应用是否运行（等待 30 秒让容器启动）
+          sleep 30
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+              "${ALIYUN_USER}@${ALIYUN_HOST}" << 'VERIFY_SCRIPT'
+
+            # 检查 Docker 容器状态
+            DEPLOY_DIR="${ALIYUN_DEPLOY_DIR:-/opt/nofx}"
+            cd "$DEPLOY_DIR"
+            
+            echo "📋 Container status:"
+            docker compose -f docker-compose.prod.yml ps
+            
+            # 检查应用日志
+            echo "📝 Recent logs:"
+            docker compose -f docker-compose.prod.yml logs --tail=20 | tail -30
+
+          VERIFY_SCRIPT
+
+      - name: Send notification on success
+        if: success()
+        run: |
+          echo "✅ Deployment succeeded!"
+          echo "Access the app at: http://${{ secrets.ALIYUN_HOST }}:3000"
+
+      - name: Send notification on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed! Please check the logs above."
