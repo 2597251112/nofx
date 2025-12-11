@@ -2081,21 +2081,14 @@ func (s *Server) handleRegister(c *gin.Context) {
 		return
 	}
 
-	// Generate OTP secret
-	otpSecret, err := auth.GenerateOTPSecret()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "OTP secret generation failed"})
-		return
-	}
-
-	// Create user (unverified OTP status)
+	// Create user - directly verified without OTP for simplified flow
 	userID := uuid.New().String()
 	user := &store.User{
 		ID:           userID,
 		Email:        req.Email,
 		PasswordHash: passwordHash,
-		OTPSecret:    otpSecret,
-		OTPVerified:  false,
+		OTPSecret:    "", // No OTP secret
+		OTPVerified:  true, // Directly marked as verified
 	}
 
 	err = s.store.User().Create(user)
@@ -2104,14 +2097,24 @@ func (s *Server) handleRegister(c *gin.Context) {
 		return
 	}
 
-	// Return OTP setup information
-	qrCodeURL := auth.GetOTPQRCodeURL(otpSecret, req.Email)
+	// Generate JWT token immediately
+	token, err := auth.GenerateJWT(user.ID, user.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	// Initialize default model and exchange configs for user
+	err = s.initUserDefaultConfigs(user.ID)
+	if err != nil {
+		logger.Infof("Failed to initialize user default configs: %v", err)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"user_id":     userID,
-		"email":       req.Email,
-		"otp_secret":  otpSecret,
-		"qr_code_url": qrCodeURL,
-		"message":     "Please scan the QR code with Google Authenticator and verify OTP",
+		"token":   token,
+		"user_id": userID,
+		"email":   req.Email,
+		"message": "Registration successful",
 	})
 }
 
