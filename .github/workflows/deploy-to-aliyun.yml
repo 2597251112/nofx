@@ -35,7 +35,7 @@ jobs:
 
             # 设置变量
             DEPLOY_DIR="${ALIYUN_DEPLOY_DIR:-/opt/nofx}"
-            REPO_URL="https://github.com/2597251112/nofx.git"
+            REPO_URL="https://github.com/NoFxAiOS/nofx.git"
             BRANCH="main"
 
             # 创建部署目录
