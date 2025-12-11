@@ -47,6 +47,12 @@ jobs:
             git clone -b "$BRANCH" "$REPO_URL" "$DEPLOY_DIR"
             cd "$DEPLOY_DIR"
 
+            # 从 .env.example 创建 .env 文件（如果不存在）
+            if [ -f ".env.example" ] && [ ! -f ".env" ]; then
+              cp .env.example .env
+              echo "Created .env from .env.example"
+            fi
+
             # 使用 Docker Compose 更新和重启服务
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
