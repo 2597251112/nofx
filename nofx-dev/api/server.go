@@ -2173,6 +2173,7 @@ func (s *Server) handleLogin(c *gin.Context) {
 	var req struct {
 		Email    string `json:"email" binding:"required,email"`
 		Password string `json:"password" binding:"required"`
+		OTPCode  string `json:"otp_code"` // Optional OTP code
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -2193,22 +2194,37 @@ func (s *Server) handleLogin(c *gin.Context) {
 		return
 	}
 
-	// Check if OTP is verified
-	if !user.OTPVerified {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":              "Account has not completed OTP setup",
-			"user_id":            user.ID,
-			"requires_otp_setup": true,
+	// If user has OTP setup and OTP code is provided, verify it
+	if user.OTPVerified && user.OTPSecret != "" && req.OTPCode != "" {
+		if !auth.VerifyOTP(user.OTPSecret, req.OTPCode) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Verification code error"})
+			return
+		}
+	}
+
+	// If OTP is set up but no code provided, ask for it
+	if user.OTPVerified && user.OTPSecret != "" && req.OTPCode == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"user_id":      user.ID,
+			"email":        user.Email,
+			"message":      "Please enter Google Authenticator code",
+			"requires_otp": true,
 		})
 		return
 	}
 
-	// Return status requiring OTP verification
+	// Generate JWT token (OTP verified or not required)
+	token, err := auth.GenerateJWT(user.ID, user.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"user_id":      user.ID,
-		"email":        user.Email,
-		"message":      "Please enter Google Authenticator code",
-		"requires_otp": true,
+		"token":   token,
+		"user_id": user.ID,
+		"email":   user.Email,
+		"message": "Login successful",
 	})
 }
 
